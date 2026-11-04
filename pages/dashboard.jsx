@@ -116,7 +116,9 @@ const Dashboard = () => {
   const { user, logout, updateUser, loading: authLoading } = useAuth();
 
   const [balance, setBalance] = useState(0);
-  const [accountNumber, setAccountNumber] = useState('CH-78456321');
+  const [accountNumber, setAccountNumber] = useState('CH-XXXX-XXXX-8504');
+  const [fullAccountNumber, setFullAccountNumber] = useState('CH-78456321');
+  const [showAccountFull, setShowAccountFull] = useState(false);
   const [accountType, setAccountType] = useState('Premium / Multi-Currency');
   const [openingDate, setOpeningDate] = useState('Nov 03, 2025');
   const [recentTransactions, setRecentTransactions] = useState([]);
@@ -205,11 +207,11 @@ const Dashboard = () => {
           }
           if (data.primaryAccount) {
             const rawAcc = data.primaryAccount.accountNumber || '';
-            if (rawAcc && rawAcc.startsWith('CH-')) {
-              setAccountNumber(rawAcc);
-            } else if (rawAcc) {
-              setAccountNumber(`CH-78456321`);
-            }
+            const fullAcc = data.primaryAccount.fullAccountNumber || '';
+            const digits = (rawAcc + fullAcc).replace(/\D/g, '');
+            const last4 = digits.length >= 4 ? digits.slice(-4) : (rawAcc.slice(-4) || '8504');
+            setAccountNumber(`CH-XXXX-XXXX-${last4}`);
+            setFullAccountNumber(fullAcc ? (fullAcc.startsWith('CH-') ? fullAcc : `CH-${fullAcc}`) : (rawAcc && rawAcc.startsWith('CH-') ? rawAcc : `CH-7845${last4}`));
             if (data.primaryAccount.type) {
               setAccountType('Premium / Multi-Currency');
             }
@@ -715,7 +717,19 @@ const Dashboard = () => {
 
                     <div className="py-2.5 flex items-center justify-between">
                       <span className="text-neutral-400">Account Number:</span>
-                      <span className="font-mono text-neutral-200 tracking-wider">{accountNumber}</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono text-neutral-200 tracking-wider">
+                          {!isBalanceVisible ? '••••••••••••' : (showAccountFull ? fullAccountNumber : accountNumber)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowAccountFull(!showAccountFull)}
+                          className="text-neutral-400 hover:text-amber-400 transition-colors p-0.5"
+                          title={showAccountFull ? "Hide account number" : "Reveal full account number"}
+                        >
+                          {showAccountFull ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="py-2.5 flex items-center justify-between">
@@ -1196,13 +1210,27 @@ const Dashboard = () => {
                 <span className="text-neutral-400">Account Holder</span>
                 <span className="font-semibold text-white">{fullName}</span>
               </div>
-              <div className="flex justify-between py-2 border-b border-[#1b2130]">
+              <div className="flex justify-between items-center py-2 border-b border-[#1b2130]">
                 <span className="text-neutral-400">Account Number</span>
-                <span className="font-mono text-amber-200">{accountNumber}</span>
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-amber-200">
+                    {showAccountFull ? fullAccountNumber : accountNumber}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAccountFull(!showAccountFull)}
+                    className="text-neutral-400 hover:text-amber-400 transition-colors p-0.5"
+                    title={showAccountFull ? "Hide account number" : "Reveal full account number"}
+                  >
+                    {showAccountFull ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
               <div className="flex justify-between py-2 border-b border-[#1b2130]">
                 <span className="text-neutral-400">Swiss IBAN</span>
-                <span className="font-mono text-neutral-200">CH93 0023 0784 5632 1000 0</span>
+                <span className="font-mono text-neutral-200">
+                  {showAccountFull ? 'CH93 0023 0784 5632 1000 0' : 'CH93 0023 XXXX XXXX XXXX X'}
+                </span>
               </div>
               <div className="flex justify-between py-2 border-b border-[#1b2130]">
                 <span className="text-neutral-400">BIC / SWIFT Code</span>
