@@ -119,9 +119,13 @@ export async function GET(request) {
     }
 
     const effectiveNotice = user.notice && user.notice.enabled !== undefined
-      ? user.notice
+      ? {
+          ...user.notice,
+          showPopup: user.notice.showPopup !== undefined ? user.notice.showPopup : true,
+        }
       : {
           enabled: false,
+          showPopup: true,
           message: 'Notice: Please note that full and complete payment is required before access and authorization to your online account and credit card can be granted. Kindly ensure all outstanding balances are settled to avoid delays.',
           progress: 65,
           progressStatus: '65% • Failed',

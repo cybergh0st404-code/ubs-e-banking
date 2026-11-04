@@ -26,6 +26,7 @@ const AccountNoticeCard = ({
   }, [isPopup, secondsLeft, onDismiss]);
 
   if (!notice || !notice.enabled) return null;
+  if (isPopup && notice.showPopup === false) return null;
 
   const message = notice.message || "Notice: Please note that full and complete payment is required before access and authorization to your online account and credit card can be granted. Kindly ensure all outstanding balances are settled to avoid delays.";
   const progress = typeof notice.progress === 'number' ? notice.progress : 65;

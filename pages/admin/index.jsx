@@ -99,6 +99,7 @@ const AdminUsersPage = () => {
 
   const [noticeForm, setNoticeForm] = useState({
     enabled: false,
+    showPopup: true,
     message: '',
     progress: 65,
     progressStatus: '65% • Failed',
@@ -321,7 +322,8 @@ const AdminUsersPage = () => {
     setNoticeUser(u);
     const n = u.notice || {};
     setNoticeForm({
-      enabled: n.enabled !== undefined ? n.enabled : false,
+      enabled: Boolean(n.enabled),
+      showPopup: n.showPopup !== undefined ? Boolean(n.showPopup) : true,
       message: n.message || "Notice: Please note that full and complete payment is required before access and authorization to your online account and credit card can be granted. Kindly ensure all outstanding balances are settled to avoid delays.",
       progress: typeof n.progress === 'number' ? n.progress : 65,
       progressStatus: n.progressStatus || "65% • Failed",
@@ -632,10 +634,18 @@ const AdminUsersPage = () => {
                                     onClick={() => openNoticeModal(u)}
                                     className={`p-1.5 rounded transition-colors ${
                                       u.notice?.enabled
-                                        ? 'text-accent-red bg-red-100 hover:bg-red-200 ring-1 ring-red-400'
+                                        ? u.notice?.showPopup === false
+                                          ? 'text-amber-700 bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-400'
+                                          : 'text-accent-red bg-red-100 hover:bg-red-200 ring-1 ring-red-400'
                                         : 'text-neutral-500 hover:text-accent-red hover:bg-neutral-100'
                                     }`}
-                                    title={u.notice?.enabled ? "Warning Active (Click to edit/disable)" : "Configure Account Warning Notice"}
+                                    title={
+                                      u.notice?.enabled
+                                        ? u.notice?.showPopup === false
+                                          ? 'Warning Active: Banner Only (No Pop-up)'
+                                          : 'Warning Active: With Pop-up Alert'
+                                        : 'Configure Account Warning Notice'
+                                    }
                                   >
                                     <AlertTriangle className="w-4 h-4" />
                                   </button>
@@ -730,12 +740,20 @@ const AdminUsersPage = () => {
                               onClick={() => openNoticeModal(u)}
                               className={`flex items-center space-x-1 px-2.5 py-1.5 rounded text-xs font-semibold transition-colors ${
                                 u.notice?.enabled
-                                  ? 'bg-red-100 text-accent-red ring-1 ring-red-400'
+                                  ? u.notice?.showPopup === false
+                                    ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-400'
+                                    : 'bg-red-100 text-accent-red ring-1 ring-red-400'
                                   : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                               }`}
                             >
                               <AlertTriangle className="w-3.5 h-3.5" />
-                              <span>{u.notice?.enabled ? 'Notice On' : 'Notice'}</span>
+                              <span>
+                                {u.notice?.enabled
+                                  ? u.notice?.showPopup === false
+                                    ? 'Notice (No Pop)'
+                                    : 'Notice (Pop-up)'
+                                  : 'Notice'}
+                              </span>
                             </button>
 
                             <button
@@ -1252,21 +1270,72 @@ const AdminUsersPage = () => {
                 </div>
 
                 <form onSubmit={handleSaveNotice} className="space-y-4">
-                  {/* Master Toggle */}
-                  <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-bank">
-                    <div>
-                      <div className="text-sm font-bold text-red-900">Enable Restriction Warning</div>
-                      <div className="text-xs text-red-700">Display warning popup & block Transfer/Transactions</div>
+                  <div className="space-y-2.5">
+                    <label className="block text-xs font-semibold text-neutral-700">Restriction Warning Mode</label>
+
+                    {/* Mode 1: With Pop-up */}
+                    <div className={`flex items-center justify-between p-3 rounded-bank border transition-all ${
+                      noticeForm.enabled && noticeForm.showPopup !== false
+                        ? 'bg-red-50/80 border-red-300 shadow-sm'
+                        : 'bg-neutral-50 border-neutral-200 hover:bg-neutral-100/60'
+                    }`}>
+                      <div className="pr-3">
+                        <div className="text-xs font-bold text-neutral-900 flex items-center space-x-1.5">
+                          <span className={`w-2 h-2 rounded-full ${noticeForm.enabled && noticeForm.showPopup !== false ? 'bg-red-500' : 'bg-neutral-400'}`} />
+                          <span>Enable Restriction Warning (With Pop-up Alert)</span>
+                        </div>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          Displays restriction banner on user dashboard & triggers pop-up modal alert upon login.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(noticeForm.enabled && noticeForm.showPopup !== false)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNoticeForm({ ...noticeForm, enabled: true, showPopup: true });
+                            } else {
+                              setNoticeForm({ ...noticeForm, enabled: false, showPopup: false });
+                            }
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-red"></div>
+                      </label>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={noticeForm.enabled}
-                        onChange={(e) => setNoticeForm({ ...noticeForm, enabled: e.target.value })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-red"></div>
-                    </label>
+
+                    {/* Mode 2: Without Pop-up */}
+                    <div className={`flex items-center justify-between p-3 rounded-bank border transition-all ${
+                      noticeForm.enabled && noticeForm.showPopup === false
+                        ? 'bg-amber-50/80 border-amber-300 shadow-sm'
+                        : 'bg-neutral-50 border-neutral-200 hover:bg-neutral-100/60'
+                    }`}>
+                      <div className="pr-3">
+                        <div className="text-xs font-bold text-neutral-900 flex items-center space-x-1.5">
+                          <span className={`w-2 h-2 rounded-full ${noticeForm.enabled && noticeForm.showPopup === false ? 'bg-amber-500' : 'bg-neutral-400'}`} />
+                          <span>Enable Restriction Warning (Without Pop-up)</span>
+                        </div>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          Displays restriction warning banner on dashboard only — NO pop-up dialog will appear.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(noticeForm.enabled && noticeForm.showPopup === false)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNoticeForm({ ...noticeForm, enabled: true, showPopup: false });
+                            } else {
+                              setNoticeForm({ ...noticeForm, enabled: false, showPopup: false });
+                            }
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                      </label>
+                    </div>
                   </div>
 
                   {/* Message */}

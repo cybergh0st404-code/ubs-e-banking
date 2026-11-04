@@ -184,7 +184,11 @@ const Dashboard = () => {
 
     if (user.notice && user.notice.enabled) {
       setNotice(user.notice);
-      setShowNoticePopup(true);
+      if (user.notice.showPopup !== false) {
+        setShowNoticePopup(true);
+      } else {
+        setShowNoticePopup(false);
+      }
     }
 
     const fetchAccountData = async () => {
@@ -238,7 +242,11 @@ const Dashboard = () => {
           setAccountRestriction(null);
           if (data.notice && data.notice.enabled) {
             setNotice(data.notice);
-            setShowNoticePopup(true);
+            if (data.notice.showPopup !== false) {
+              setShowNoticePopup(true);
+            } else {
+              setShowNoticePopup(false);
+            }
           } else {
             setNotice(null);
             setShowNoticePopup(false);
@@ -395,8 +403,8 @@ const Dashboard = () => {
         <div className="absolute top-1/2 right-10 w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_right,_var(--tw-gradient-stops))] from-amber-400/5 via-transparent to-transparent blur-3xl opacity-40" />
       </div>
 
-      {/* Pop-up Notice Card if enabled by administrator */}
-      {showNoticePopup && notice && notice.enabled && (
+      {/* Pop-up Notice Card if enabled by administrator with Pop-up */}
+      {showNoticePopup && notice && notice.enabled && notice.showPopup !== false && (
         <AccountNoticeCard
           notice={notice}
           isPopup={true}
