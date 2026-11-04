@@ -263,6 +263,7 @@ export async function POST(request) {
         email: dbUser.email,
         role: dbUser.role || 'user',
         allowedPages: dbUser.allowedPages || null,
+        lockedPages: dbUser.lockedPages || [],
         notice: dbUser.notice || null,
       };
 

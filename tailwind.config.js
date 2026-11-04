@@ -7,6 +7,26 @@ export default {
   theme: {
     extend: {
       colors: {
+        gold: {
+          100: '#fdfbf2',
+          200: '#f9f1d4',
+          300: '#edd897',
+          400: '#e5c170',
+          500: '#d4af37',
+          600: '#bf953f',
+          700: '#9b742b',
+          800: '#75541c',
+          900: '#46320e',
+        },
+        obsidian: {
+          950: '#07090d',
+          900: '#0b0d13',
+          850: '#0f121a',
+          800: '#141824',
+          750: '#1a1f2e',
+          700: '#22293d',
+          600: '#2c354d',
+        },
         primary: {
           navy: '#00335c',
           blue: '#1565c0',
@@ -31,14 +51,19 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'SF Pro Display', 'Roboto', 'system-ui', 'sans-serif'],
+        serif: ['"Playfair Display"', 'Georgia', 'serif'],
+        cinzel: ['Cinzel', 'serif'],
       },
       borderRadius: {
         'bank': '8px',
         'card': '12px',
+        'luxury': '16px',
       },
       boxShadow: {
         'bank': '0 2px 8px rgba(0, 51, 92, 0.08)',
         'bank-lg': '0 4px 16px rgba(0, 51, 92, 0.12)',
+        'gold-glow': '0 0 30px rgba(212, 175, 55, 0.15)',
+        'gold-subtle': '0 0 15px rgba(212, 175, 55, 0.10)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in',

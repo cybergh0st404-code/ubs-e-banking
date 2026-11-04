@@ -31,7 +31,7 @@ const Input = ({
           placeholder={placeholder}
           value={value}
           onChange={onChange}
-          className={`input-field ${isPasswordField && showPasswordToggle ? 'pr-11' : ''} ${error ? 'border-accent-red focus:ring-accent-red' : ''} ${className}`}
+          className={`input-field bg-white text-neutral-900 placeholder:text-neutral-400 ${isPasswordField && showPasswordToggle ? 'pr-11' : ''} ${error ? 'border-accent-red focus:ring-accent-red' : ''} ${className}`}
           required={required}
           {...props}
         />

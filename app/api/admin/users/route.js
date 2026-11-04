@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, DEFAULT_ALLOWED_PAGES } from '../../../../lib/db.js';
+import { getBankData, saveBankData, DEFAULT_ALLOWED_PAGES, normalizePagesList } from '../../../../lib/db.js';
 import { requireAdmin, hashPassword, hashTwoFactorCode } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -18,11 +18,17 @@ export async function GET(request) {
     const usersWithAccounts = (data.users || []).map((user) => {
       const userAccounts = (data.accounts || []).filter((a) => a.userId === user.id);
       const totalBalance = userAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+      const userTransactions = (data.transactions || []).filter((t) => t.userId === user.id);
+      const initialDepositTx = userTransactions.find(
+        (t) => (t.description?.toLowerCase().includes('initial') || t.category === 'Deposit') && t.type === 'credit'
+      ) || userTransactions.find((t) => t.type === 'credit');
+      const initialDepositDate = initialDepositTx ? initialDepositTx.date : (user.createdAt || new Date().toISOString().split('T')[0]);
       return {
         ...user,
         accountsCount: userAccounts.length,
         totalBalance,
         primaryAccount: userAccounts[0] || null,
+        initialDepositDate,
       };
     });
     return new Response(JSON.stringify({ users: usersWithAccounts }), {
@@ -86,9 +92,10 @@ export async function POST(request) {
       status: status || 'active',
       phone: body.phone || '',
       address: body.address || '',
-      allowedPages: Array.isArray(body.allowedPages) && body.allowedPages.length > 0 ? body.allowedPages : DEFAULT_ALLOWED_PAGES,
+      allowedPages: Array.isArray(body.allowedPages) && body.allowedPages.length > 0 ? normalizePagesList(body.allowedPages) : DEFAULT_ALLOWED_PAGES,
+      lockedPages: Array.isArray(body.lockedPages) ? normalizePagesList(body.lockedPages) : [],
       tokenVersion: 1,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: (body.createdAt || body.openingDate || new Date().toISOString().split('T')[0]).trim(),
     };
 
     const parsedBalance = parseFloat(initialBalance) || 0;
@@ -111,6 +118,7 @@ export async function POST(request) {
 
     // If initial balance > 0, create an initial deposit transaction
     if (parsedBalance > 0) {
+      const depositDate = body.initialDepositDate || body.depositDate || new Date().toISOString().split('T')[0];
       const initTx = {
         id: `tx-${Date.now()}`,
         userId: userId,
@@ -119,7 +127,7 @@ export async function POST(request) {
         type: 'credit',
         description: 'Initial Account Deposit',
         amount: parsedBalance,
-        date: new Date().toISOString().split('T')[0],
+        date: depositDate,
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         category: 'Deposit',
         status: 'completed',
@@ -173,19 +181,25 @@ export async function PUT(request) {
 
     const current = data.users[userIndex];
     let newPassword = current.password;
-    if (password !== undefined && password !== '') {
+    let passwordChanged = false;
+    if (password !== undefined && password !== '' && !password.startsWith('pbkdf2:')) {
       newPassword = await hashPassword(password.trim());
+      passwordChanged = true;
     }
 
     let newTwoFactorCode = current.twoFactorCode;
-    if (twoFactorCode !== undefined && twoFactorCode !== '') {
+    if (twoFactorCode !== undefined && twoFactorCode !== '' && !twoFactorCode.startsWith('pbkdf2:')) {
       newTwoFactorCode = await hashTwoFactorCode(twoFactorCode.trim());
     }
 
     let tokenVersion = Number(current.tokenVersion) || 1;
-    if ((password !== undefined && password !== '') || status === 'flagged') {
+    if (passwordChanged || status === 'flagged') {
       tokenVersion += 1;
     }
+
+    const newCreatedAt = (body.createdAt || body.openingDate) !== undefined && (body.createdAt || body.openingDate) !== ''
+      ? (body.createdAt || body.openingDate).trim()
+      : current.createdAt;
 
     const updatedUser = {
       ...current,
@@ -196,6 +210,7 @@ export async function PUT(request) {
       status: status !== undefined ? status : current.status,
       phone: phone !== undefined ? phone : current.phone,
       address: address !== undefined ? address : current.address,
+      createdAt: newCreatedAt,
       tokenVersion,
     };
 
@@ -225,19 +240,60 @@ export async function PUT(request) {
 
     // If allowedPages settings were provided, update user allowedPages
     if (body.allowedPages !== undefined && Array.isArray(body.allowedPages)) {
-      updatedUser.allowedPages = body.allowedPages;
+      updatedUser.allowedPages = normalizePagesList(body.allowedPages);
+    }
+
+    // If lockedPages settings were provided, update user lockedPages
+    if (body.lockedPages !== undefined && Array.isArray(body.lockedPages)) {
+      updatedUser.lockedPages = normalizePagesList(body.lockedPages);
     }
 
     data.users[userIndex] = updatedUser;
 
     // If balance was provided, update primary account balance
+    let effectiveBalance = null;
     if (balance !== undefined && balance !== '') {
       const newBal = parseFloat(balance);
       if (!isNaN(newBal)) {
+        effectiveBalance = newBal;
         const accIdx = (data.accounts || []).findIndex((a) => a.userId === id);
         if (accIdx !== -1) {
           data.accounts[accIdx].balance = newBal;
         }
+      }
+    }
+
+    // If initialDepositDate was provided, update or create the initial deposit transaction
+    const depositDate = body.initialDepositDate || body.depositDate;
+    if (depositDate !== undefined && depositDate !== '') {
+      const cleanDate = depositDate.trim();
+      const userTransactions = data.transactions || [];
+      const txIdx = userTransactions.findIndex(
+        (t) => t.userId === id && (t.description?.toLowerCase().includes('initial') || t.category === 'Deposit') && t.type === 'credit'
+      );
+
+      if (txIdx !== -1) {
+        userTransactions[txIdx].date = cleanDate;
+        if (effectiveBalance !== null) {
+          userTransactions[txIdx].amount = effectiveBalance;
+        }
+      } else {
+        const userAcc = (data.accounts || []).find((a) => a.userId === id);
+        const bal = effectiveBalance !== null ? effectiveBalance : (userAcc ? Number(userAcc.balance) || 0 : 0);
+        const initTx = {
+          id: `tx-${Date.now()}`,
+          userId: id,
+          userName: updatedUser.name,
+          accountNumber: userAcc ? userAcc.accountNumber : '**** 0000',
+          type: 'credit',
+          description: 'Initial Account Deposit',
+          amount: bal,
+          date: cleanDate,
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          category: 'Deposit',
+          status: 'completed',
+        };
+        data.transactions = [initTx, ...userTransactions];
       }
     }
 

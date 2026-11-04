@@ -15,7 +15,22 @@ export async function GET(request) {
     }
 
     const data = await getBankData();
-    return new Response(JSON.stringify({ accounts: data.accounts || [] }), {
+    const accountsWithDeposit = (data.accounts || []).map((acc) => {
+      const initTx = (data.transactions || []).find(
+        (t) => (t.userId === acc.userId || t.accountNumber === acc.accountNumber) &&
+               (t.description?.toLowerCase().includes('initial') || t.category === 'Deposit') &&
+               t.type === 'credit'
+      ) || (data.transactions || []).find(
+        (t) => (t.userId === acc.userId || t.accountNumber === acc.accountNumber) && t.type === 'credit'
+      );
+      const user = (data.users || []).find((u) => u.id === acc.userId);
+      return {
+        ...acc,
+        initialDepositDate: initTx ? initTx.date : new Date().toISOString().split('T')[0],
+        openingDate: user ? (user.createdAt || '') : '',
+      };
+    });
+    return new Response(JSON.stringify({ accounts: accountsWithDeposit }), {
       status: 200,
       headers: { 
         'Content-Type': 'application/json',
@@ -62,14 +77,56 @@ export async function PUT(request) {
     }
 
     const current = data.accounts[accIndex];
+    const newBal = balance !== undefined ? parseFloat(balance) : current.balance;
     const updated = {
       ...current,
-      balance: balance !== undefined ? parseFloat(balance) : current.balance,
+      balance: newBal,
       status: status || current.status,
       type: type || current.type,
       accountNumber: accountNumber || current.accountNumber,
     };
     data.accounts[accIndex] = updated;
+
+    // Update or create initial deposit transaction date if provided
+    const depositDate = body.initialDepositDate || body.depositDate;
+    if (depositDate !== undefined && depositDate !== '') {
+      const cleanDate = depositDate.trim();
+      const userTransactions = data.transactions || [];
+      const txIdx = userTransactions.findIndex(
+        (t) => (t.userId === current.userId || t.accountNumber === current.accountNumber) &&
+               (t.description?.toLowerCase().includes('initial') || t.category === 'Deposit') &&
+               t.type === 'credit'
+      );
+
+      if (txIdx !== -1) {
+        userTransactions[txIdx].date = cleanDate;
+        userTransactions[txIdx].amount = newBal;
+      } else {
+        const initTx = {
+          id: `tx-${Date.now()}`,
+          userId: current.userId,
+          userName: current.userName,
+          accountNumber: current.accountNumber,
+          type: 'credit',
+          description: 'Initial Account Deposit',
+          amount: newBal,
+          date: cleanDate,
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          category: 'Deposit',
+          status: 'completed',
+        };
+        data.transactions = [initTx, ...userTransactions];
+      }
+    }
+
+    // Update user opening date (createdAt) if provided
+    const openingDate = body.openingDate || body.createdAt;
+    if (openingDate !== undefined && openingDate !== '') {
+      const uIdx = (data.users || []).findIndex((u) => u.id === current.userId);
+      if (uIdx !== -1) {
+        data.users[uIdx].createdAt = openingDate.trim();
+      }
+    }
 
     await saveBankData(data);
 

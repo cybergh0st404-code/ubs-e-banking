@@ -18,6 +18,7 @@ import {
   Key, 
   AlertTriangle,
   Lock, 
+  Unlock,
   X,
   DollarSign,
   Eye,
@@ -31,23 +32,15 @@ import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { useAuth } from '../../utils/AuthContext';
+import {
+  ALL_NAVIGATION_MENUS,
+  ALL_MENU_IDS,
+  DEFAULT_CORE_MENU_IDS,
+  normalizeMenuIds,
+} from '../../lib/navigationConfig.js';
 
-const ALL_AVAILABLE_PAGES = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'transfer', label: 'Transfer Money' },
-  { id: 'transactions', label: 'Transaction History' },
-  { id: 'wire-transfer', label: 'Wire Transfer' },
-  { id: 'cards', label: 'Cards & Virtual Cards' },
-  { id: 'bill-pay', label: 'Bill Pay & AutoPay' },
-  { id: 'deposit', label: 'Deposit Checks' },
-  { id: 'statements', label: 'Statements & Taxes' },
-  { id: 'credit-score', label: 'FICO® Credit Score' },
-  { id: 'security', label: 'Security & Sessions' },
-  { id: 'messages', label: 'Secure Messages' },
-  { id: 'settings', label: 'Settings' },
-];
-
-const DEFAULT_PAGES = ALL_AVAILABLE_PAGES.map((p) => p.id);
+const ALL_AVAILABLE_PAGES = ALL_NAVIGATION_MENUS;
+const DEFAULT_PAGES = ALL_MENU_IDS;
 
 const AdminUsersPage = () => {
   const router = useRouter();
@@ -75,9 +68,12 @@ const AdminUsersPage = () => {
     password: '',
     twoFactorCode: '',
     initialBalance: '0',
+    initialDepositDate: new Date().toISOString().split('T')[0],
+    createdAt: new Date().toISOString().split('T')[0],
     accountType: 'Checking',
     status: 'active',
     allowedPages: DEFAULT_PAGES,
+    lockedPages: [],
   });
 
   const [editUser, setEditUser] = useState({
@@ -87,8 +83,11 @@ const AdminUsersPage = () => {
     password: '',
     twoFactorCode: '',
     balance: '',
+    initialDepositDate: '',
+    createdAt: '',
     status: 'active',
     allowedPages: [],
+    lockedPages: [],
   });
 
   const [noticeForm, setNoticeForm] = useState({
@@ -168,9 +167,12 @@ const AdminUsersPage = () => {
         password: '',
         twoFactorCode: String(Math.floor(100000 + Math.random() * 900000)),
         initialBalance: '50000',
+        initialDepositDate: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString().split('T')[0],
         accountType: 'Checking',
         status: 'active',
         allowedPages: DEFAULT_PAGES,
+        lockedPages: [],
       });
       fetchUsers();
     } catch (err) {
@@ -242,15 +244,22 @@ const AdminUsersPage = () => {
   };
 
   const openEditModal = (u) => {
+    // Read the exact user allowedPages from database and normalize
+    const cleanAllowed = Array.isArray(u.allowedPages) ? normalizeMenuIds(u.allowedPages) : DEFAULT_CORE_MENU_IDS;
+    const cleanLocked = Array.isArray(u.lockedPages) ? normalizeMenuIds(u.lockedPages) : [];
+
     setEditUser({
       id: u.id,
       name: u.name || '',
       email: u.email || '',
-      password: u.password || '',
-      twoFactorCode: u.twoFactorCode || '',
+      password: '', // Blank by default so password is never accidentally re-hashed
+      twoFactorCode: '', // Blank by default so 2FA code is never accidentally re-hashed
       balance: u.totalBalance !== undefined ? String(u.totalBalance) : '',
+      initialDepositDate: u.initialDepositDate || u.createdAt || new Date().toISOString().split('T')[0],
+      createdAt: u.createdAt || new Date().toISOString().split('T')[0],
       status: u.status || 'active',
-      allowedPages: Array.isArray(u.allowedPages) && u.allowedPages.length > 0 ? u.allowedPages : DEFAULT_PAGES,
+      allowedPages: cleanAllowed,
+      lockedPages: cleanLocked,
     });
     setShowEditModal(true);
   };
@@ -514,8 +523,14 @@ const AdminUsersPage = () => {
                                   </div>
                                   <div>
                                     <div className="font-semibold text-neutral-900">{u.name}</div>
-                                    <div className="text-xs text-neutral-500 font-mono">
-                                      {u.primaryAccount ? u.primaryAccount.accountNumber : 'No account'}
+                                    <div className="flex items-center space-x-1.5 text-xs text-neutral-500 font-mono">
+                                      <span>{u.primaryAccount ? u.primaryAccount.accountNumber : 'No account'}</span>
+                                      {u.lockedPages && u.lockedPages.length > 0 && (
+                                        <span className="inline-flex items-center text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.2 rounded font-sans" title={`Locked menus: ${u.lockedPages.join(', ')}`}>
+                                          <Lock className="w-2.5 h-2.5 mr-0.5" />
+                                          {u.lockedPages.length} Locked
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -739,7 +754,7 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-neutral-700 mb-1">Initial Balance ($) *</label>
                       <Input
@@ -749,6 +764,24 @@ const AdminUsersPage = () => {
                         placeholder="50000.00"
                         value={newUser.initialBalance}
                         onChange={(e) => setNewUser({ ...newUser, initialBalance: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 mb-1">Deposit Date *</label>
+                      <Input
+                        type="date"
+                        required
+                        value={newUser.initialDepositDate}
+                        onChange={(e) => setNewUser({ ...newUser, initialDepositDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 mb-1">Opening Date *</label>
+                      <Input
+                        type="date"
+                        required
+                        value={newUser.createdAt}
+                        onChange={(e) => setNewUser({ ...newUser, createdAt: e.target.value })}
                       />
                     </div>
                     <div>
@@ -765,57 +798,103 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
 
-                  {/* Dashboard Modules / Pages Permission */}
+                  {/* Dashboard Modules / Pages Permission & Locks */}
                   <div className="pt-2 border-t border-neutral-200">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
                       <div>
                         <label className="block text-xs font-bold text-neutral-800">
-                          Visible Dashboard Modules ({newUser.allowedPages.length}/{ALL_AVAILABLE_PAGES.length})
+                          Sidebar Menus & Access Control ({newUser.allowedPages.length}/{ALL_AVAILABLE_PAGES.length} Visible, {newUser.lockedPages?.length || 0} Locked)
                         </label>
-                        <p className="text-[11px] text-neutral-500">Choose which pages appear on this user's sidebar menu</p>
+                        <p className="text-[11px] text-neutral-500">Check to display on sidebar. Toggle the Lock to restrict user access.</p>
                       </div>
-                      <div className="space-x-2">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                         <button
                           type="button"
-                          onClick={() => setNewUser({ ...newUser, allowedPages: DEFAULT_PAGES })}
-                          className="text-[11px] font-semibold text-primary-blue hover:underline"
+                          onClick={() => setNewUser({ ...newUser, allowedPages: ALL_MENU_IDS })}
+                          className="px-2 py-0.5 rounded bg-blue-50 text-primary-blue hover:bg-blue-100 font-semibold"
                         >
-                          Select All
+                          Show All
                         </button>
-                        <span className="text-neutral-300">|</span>
                         <button
                           type="button"
-                          onClick={() => setNewUser({ ...newUser, allowedPages: ['dashboard', 'settings'] })}
-                          className="text-[11px] font-semibold text-neutral-500 hover:underline"
+                          onClick={() => setNewUser({ ...newUser, allowedPages: DEFAULT_CORE_MENU_IDS })}
+                          className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                         >
-                          Min Core
+                          Core Only
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewUser({ ...newUser, lockedPages: ALL_MENU_IDS.filter(p => p !== 'dashboard') })}
+                          className="px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 font-semibold"
+                        >
+                          Lock All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewUser({ ...newUser, lockedPages: [] })}
+                          className="px-2 py-0.5 rounded bg-green-50 text-green-700 hover:bg-green-100 font-semibold"
+                        >
+                          Unlock All
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-neutral-50 p-3 rounded-bank border border-neutral-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-neutral-50 p-3 rounded-bank border border-neutral-200 max-h-60 overflow-y-auto">
                       {ALL_AVAILABLE_PAGES.map((page) => {
-                        const isChecked = newUser.allowedPages.includes(page.id);
+                        const isVisible = newUser.allowedPages.includes(page.id);
+                        const isLocked = newUser.lockedPages?.includes(page.id);
                         return (
-                          <label
+                          <div
                             key={page.id}
-                            className={`flex items-center space-x-2 p-1.5 rounded cursor-pointer transition-colors text-xs ${
-                              isChecked ? 'bg-blue-50 text-primary-blue font-semibold' : 'text-neutral-600 hover:bg-neutral-100'
+                            className={`flex items-center justify-between p-2 rounded border transition-all ${
+                              !isVisible 
+                                ? 'bg-neutral-100/70 border-neutral-200 opacity-60' 
+                                : isLocked
+                                  ? 'bg-amber-50 border-amber-300 shadow-sm'
+                                  : 'bg-white border-neutral-200 hover:border-blue-300'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setNewUser({ ...newUser, allowedPages: [...newUser.allowedPages, page.id] });
-                                } else {
-                                  setNewUser({ ...newUser, allowedPages: newUser.allowedPages.filter((p) => p !== page.id) });
-                                }
+                            <label className="flex items-center space-x-2 cursor-pointer flex-1 min-w-0 mr-1.5">
+                              <input
+                                type="checkbox"
+                                checked={isVisible}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setNewUser({ ...newUser, allowedPages: [...newUser.allowedPages, page.id] });
+                                  } else {
+                                    setNewUser({ ...newUser, allowedPages: newUser.allowedPages.filter((p) => p !== page.id) });
+                                  }
+                                }}
+                                className="rounded text-primary-blue focus:ring-primary-blue h-3.5 w-3.5"
+                              />
+                              <span className="text-xs font-medium text-neutral-800 truncate">{page.label}</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentLocks = newUser.lockedPages || [];
+                                const updated = isLocked ? currentLocks.filter(p => p !== page.id) : [...currentLocks, page.id];
+                                setNewUser({ ...newUser, lockedPages: updated });
                               }}
-                              className="rounded text-primary-blue focus:ring-primary-blue h-3.5 w-3.5"
-                            />
-                            <span className="truncate">{page.label}</span>
-                          </label>
+                              title={isLocked ? "Unlock service" : "Lock service (user cannot access)"}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                                isLocked
+                                  ? 'bg-red-500 text-white shadow-sm hover:bg-red-600'
+                                  : 'bg-neutral-200/80 text-neutral-600 hover:bg-neutral-300'
+                              }`}
+                            >
+                              {isLocked ? (
+                                <>
+                                  <Lock className="w-3 h-3" />
+                                  <span>LOCKED</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Unlock className="w-3 h-3 text-neutral-500" />
+                                  <span>OPEN</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -889,7 +968,7 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-neutral-700 mb-1">Account Balance ($)</label>
                       <Input
@@ -898,6 +977,22 @@ const AdminUsersPage = () => {
                         required
                         value={editUser.balance}
                         onChange={(e) => setEditUser({ ...editUser, balance: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 mb-1">Deposit Date</label>
+                      <Input
+                        type="date"
+                        value={editUser.initialDepositDate}
+                        onChange={(e) => setEditUser({ ...editUser, initialDepositDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 mb-1">Opening Date</label>
+                      <Input
+                        type="date"
+                        value={editUser.createdAt}
+                        onChange={(e) => setEditUser({ ...editUser, createdAt: e.target.value })}
                       />
                     </div>
                     <div>
@@ -914,58 +1009,104 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
 
-                  {/* Dashboard Modules / Pages Permission */}
+                  {/* Dashboard Modules / Pages Permission & Locks */}
                   <div className="pt-2 border-t border-neutral-200">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
                       <div>
                         <label className="block text-xs font-bold text-neutral-800">
-                          Visible Dashboard Modules ({editUser.allowedPages?.length || 0}/{ALL_AVAILABLE_PAGES.length})
+                          Sidebar Menus & Access Control ({editUser.allowedPages?.length || 0}/{ALL_AVAILABLE_PAGES.length} Visible, {editUser.lockedPages?.length || 0} Locked)
                         </label>
-                        <p className="text-[11px] text-neutral-500">Choose which pages appear on this user's sidebar menu</p>
+                        <p className="text-[11px] text-neutral-500">Check to display on sidebar. Toggle the Lock to restrict user access.</p>
                       </div>
-                      <div className="space-x-2">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                         <button
                           type="button"
-                          onClick={() => setEditUser({ ...editUser, allowedPages: DEFAULT_PAGES })}
-                          className="text-[11px] font-semibold text-primary-blue hover:underline"
+                          onClick={() => setEditUser({ ...editUser, allowedPages: ALL_MENU_IDS })}
+                          className="px-2 py-0.5 rounded bg-blue-50 text-primary-blue hover:bg-blue-100 font-semibold"
                         >
-                          Select All
+                          Show All
                         </button>
-                        <span className="text-neutral-300">|</span>
                         <button
                           type="button"
-                          onClick={() => setEditUser({ ...editUser, allowedPages: ['dashboard', 'settings'] })}
-                          className="text-[11px] font-semibold text-neutral-500 hover:underline"
+                          onClick={() => setEditUser({ ...editUser, allowedPages: DEFAULT_CORE_MENU_IDS })}
+                          className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                         >
-                          Min Core
+                          Core Only
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditUser({ ...editUser, lockedPages: ALL_MENU_IDS.filter(p => p !== 'dashboard') })}
+                          className="px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 font-semibold"
+                        >
+                          Lock All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditUser({ ...editUser, lockedPages: [] })}
+                          className="px-2 py-0.5 rounded bg-green-50 text-green-700 hover:bg-green-100 font-semibold"
+                        >
+                          Unlock All
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-neutral-50 p-3 rounded-bank border border-neutral-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-neutral-50 p-3 rounded-bank border border-neutral-200 max-h-60 overflow-y-auto">
                       {ALL_AVAILABLE_PAGES.map((page) => {
-                        const isChecked = editUser.allowedPages?.includes(page.id);
+                        const isVisible = editUser.allowedPages?.includes(page.id);
+                        const isLocked = editUser.lockedPages?.includes(page.id);
                         return (
-                          <label
+                          <div
                             key={page.id}
-                            className={`flex items-center space-x-2 p-1.5 rounded cursor-pointer transition-colors text-xs ${
-                              isChecked ? 'bg-blue-50 text-primary-blue font-semibold' : 'text-neutral-600 hover:bg-neutral-100'
+                            className={`flex items-center justify-between p-2 rounded border transition-all ${
+                              !isVisible 
+                                ? 'bg-neutral-100/70 border-neutral-200 opacity-60' 
+                                : isLocked
+                                  ? 'bg-amber-50 border-amber-300 shadow-sm'
+                                  : 'bg-white border-neutral-200 hover:border-blue-300'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                const current = editUser.allowedPages || [];
-                                if (e.target.checked) {
-                                  setEditUser({ ...editUser, allowedPages: [...current, page.id] });
-                                } else {
-                                  setEditUser({ ...editUser, allowedPages: current.filter((p) => p !== page.id) });
-                                }
+                            <label className="flex items-center space-x-2 cursor-pointer flex-1 min-w-0 mr-1.5">
+                              <input
+                                type="checkbox"
+                                checked={isVisible}
+                                onChange={(e) => {
+                                  const current = editUser.allowedPages || [];
+                                  if (e.target.checked) {
+                                    setEditUser({ ...editUser, allowedPages: [...current, page.id] });
+                                  } else {
+                                    setEditUser({ ...editUser, allowedPages: current.filter((p) => p !== page.id) });
+                                  }
+                                }}
+                                className="rounded text-primary-blue focus:ring-primary-blue h-3.5 w-3.5"
+                              />
+                              <span className="text-xs font-medium text-neutral-800 truncate">{page.label}</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentLocks = editUser.lockedPages || [];
+                                const updated = isLocked ? currentLocks.filter(p => p !== page.id) : [...currentLocks, page.id];
+                                setEditUser({ ...editUser, lockedPages: updated });
                               }}
-                              className="rounded text-primary-blue focus:ring-primary-blue h-3.5 w-3.5"
-                            />
-                            <span className="truncate">{page.label}</span>
-                          </label>
+                              title={isLocked ? "Unlock service" : "Lock service (user cannot access)"}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                                isLocked
+                                  ? 'bg-red-500 text-white shadow-sm hover:bg-red-600'
+                                  : 'bg-neutral-200/80 text-neutral-600 hover:bg-neutral-300'
+                              }`}
+                            >
+                              {isLocked ? (
+                                <>
+                                  <Lock className="w-3 h-3" />
+                                  <span>LOCKED</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Unlock className="w-3 h-3 text-neutral-500" />
+                                  <span>OPEN</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1016,7 +1157,7 @@ const AdminUsersPage = () => {
                       <input
                         type="checkbox"
                         checked={noticeForm.enabled}
-                        onChange={(e) => setNoticeForm({ ...noticeForm, enabled: e.target.checked })}
+                        onChange={(e) => setNoticeForm({ ...noticeForm, enabled: e.target.value })}
                         className="sr-only peer"
                       />
                       <div className="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-red"></div>

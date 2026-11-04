@@ -69,17 +69,13 @@ const AdminLogin = ({ validSlug }) => {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4 space-x-3">
             <img
-              src="/logo.png"
-              alt="Bank of America"
-              className="h-12 w-auto flex-shrink-0 object-contain"
-              style={{
-                mixBlendMode: 'multiply',
-                filter: 'contrast(1.2) brightness(0.95)',
-                backgroundColor: 'transparent',
-              }}
+              src="/ubslogo.png"
+              alt="UBS"
+              className="h-9 sm:h-10 w-auto flex-shrink-0 object-contain"
             />
-            <div className="text-primary-navy font-bold text-2xl">
-              Bank of America
+            <span className="h-6 w-px bg-neutral-300"></span>
+            <div className="text-primary-navy font-bold text-xl sm:text-2xl tracking-tight leading-none">
+              E-Banking
             </div>
           </div>
           <h1 className="text-2xl font-bold text-primary-navy mb-2">

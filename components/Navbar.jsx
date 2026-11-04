@@ -37,18 +37,14 @@ const Navbar = ({ user, onLogout }) => {
             <div className="flex-shrink-0 flex items-center space-x-2">
               <img
                 src="/ubslogo.png"
-                alt="Bank of America"
-                className="h-7 sm:h-9 w-auto flex-shrink-0 object-contain"
-                style={{
-                  mixBlendMode: 'multiply',
-                  filter: 'contrast(1.2) brightness(0.95)',
-                  backgroundColor: 'transparent',
-                }}
+                alt="UBS"
+                className="h-7 sm:h-8 w-auto flex-shrink-0 object-contain"
                 onError={(e) => {
                   e.target.style.display = 'none';
                 }}
               />
-              <div className="text-primary-navy font-bold text-sm sm:text-base md:text-xl tracking-tight">
+              <span className="h-5 w-px bg-neutral-300"></span>
+              <div className="text-primary-navy font-bold text-sm sm:text-base md:text-lg tracking-tight leading-none">
                 E-Banking
               </div>
             </div>

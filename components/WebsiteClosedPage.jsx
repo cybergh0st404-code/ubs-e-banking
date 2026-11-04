@@ -7,16 +7,12 @@ const WebsiteClosedPage = () => {
       <div className="max-w-md w-full animate-fade-in">
         <div className="flex items-center justify-center space-x-3 mb-6">
           <img
-            src="/logo.png"
-            alt="Bank of America"
-            className="h-10 w-auto object-contain"
-            style={{
-              mixBlendMode: 'multiply',
-              filter: 'contrast(1.2) brightness(0.95)',
-              backgroundColor: 'transparent',
-            }}
+            src="/ubslogo.png"
+            alt="UBS"
+            className="h-9 sm:h-10 w-auto object-contain"
           />
-          <span className="text-primary-navy font-bold text-2xl">Bank of America</span>
+          <span className="h-6 w-px bg-neutral-300"></span>
+          <span className="text-primary-navy font-bold text-xl sm:text-2xl">E-Banking</span>
         </div>
         <div className="bg-white rounded-card shadow-bank-lg p-8 text-center">
           <div className="flex justify-center mb-6">

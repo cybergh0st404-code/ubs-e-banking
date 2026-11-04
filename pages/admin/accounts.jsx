@@ -14,7 +14,10 @@ import {
   DollarSign, 
   Edit3, 
   X,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff,
+  TrendingUp
 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
@@ -38,6 +41,8 @@ const AdminAccountsPage = () => {
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [newBalance, setNewBalance] = useState('');
+  const [depositDate, setDepositDate] = useState('');
+  const [openingDate, setOpeningDate] = useState('');
   const [savingBalance, setSavingBalance] = useState(false);
 
   useEffect(() => {
@@ -83,6 +88,8 @@ const AdminAccountsPage = () => {
   const openBalanceModal = (acc) => {
     setSelectedAccount(acc);
     setNewBalance(String(acc.balance));
+    setDepositDate(acc.initialDepositDate || new Date().toISOString().split('T')[0]);
+    setOpeningDate(acc.openingDate || new Date().toISOString().split('T')[0]);
     setShowBalanceModal(true);
   };
 
@@ -97,6 +104,8 @@ const AdminAccountsPage = () => {
         body: JSON.stringify({
           id: selectedAccount.id,
           balance: parseFloat(newBalance) || 0,
+          initialDepositDate: depositDate,
+          openingDate: openingDate,
         }),
       });
       if (res.ok) {
@@ -434,6 +443,27 @@ const AdminAccountsPage = () => {
                     onChange={(e) => setNewBalance(e.target.value)}
                     className="input-field pl-10 font-bold text-lg"
                     placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">Initial Deposit Date</label>
+                  <input
+                    type="date"
+                    value={depositDate}
+                    onChange={(e) => setDepositDate(e.target.value)}
+                    className="input-field text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">Account Opening Date</label>
+                  <input
+                    type="date"
+                    value={openingDate}
+                    onChange={(e) => setOpeningDate(e.target.value)}
+                    className="input-field text-sm"
                   />
                 </div>
               </div>

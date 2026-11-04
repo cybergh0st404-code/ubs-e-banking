@@ -5,7 +5,6 @@ import { Shield, Lock, Mail, ArrowRight } from 'lucide-react';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import { useAuth } from '../utils/AuthContext';
- 
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -17,7 +16,7 @@ const Login = () => {
   const [twoFactorTicket, setTwoFactorTicket] = useState('');
   const [timeoutNotice, setTimeoutNotice] = useState(false);
   const router = useRouter();
-  const { login } = useAuth(); // Use the login function from AuthContext
+  const { login } = useAuth();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -87,14 +86,10 @@ const Login = () => {
             <img
               src="/ubslogo.png"
               alt="UBS"
-              className="h-12 w-auto flex-shrink-0 object-contain"
-              style={{
-                mixBlendMode: 'multiply',
-                filter: 'contrast(1.2) brightness(0.95)',
-                backgroundColor: 'transparent',
-              }}
+              className="h-9 sm:h-10 w-auto flex-shrink-0 object-contain"
             />
-            <div className="text-primary-navy font-bold text-2xl">
+            <span className="h-6 w-px bg-neutral-300"></span>
+            <div className="text-primary-navy font-bold text-xl sm:text-2xl tracking-tight leading-none">
               E-Banking
             </div>
           </div>

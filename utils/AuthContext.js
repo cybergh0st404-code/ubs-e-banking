@@ -37,7 +37,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true); // Added loading state for initial auth check
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Attempt to load user from cookies on mount
@@ -65,6 +65,16 @@ export const AuthProvider = ({ children }) => {
     setCookie('user', JSON.stringify(userData), 7); // Set for 7 days
   };
 
+  const updateUser = (updatedFields) => {
+    setUser((prev) => {
+      const merged = { ...(prev || {}), ...updatedFields };
+      try {
+        setCookie('user', JSON.stringify(merged), 7);
+      } catch (_) { }
+      return merged;
+    });
+  };
+
   const logout = async () => {
     setUser(null);
     setIsAuthenticated(false);
@@ -76,7 +86,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );
