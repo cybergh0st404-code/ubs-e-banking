@@ -187,8 +187,15 @@ export async function POST(request) {
         }
       }
 
-      if (dbUser.status === 'flagged') {
-        return new Response(JSON.stringify({ message: 'Account is restricted. Contact support.' }), {
+      if (dbUser.status === 'blocked') {
+        return new Response(JSON.stringify({ message: 'Account has been blocked by administration. Access denied.' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (dbUser.status === 'suspended') {
+        return new Response(JSON.stringify({ message: 'Account is temporarily suspended. Please contact customer service.' }), {
           status: 403,
           headers: { 'Content-Type': 'application/json' },
         });

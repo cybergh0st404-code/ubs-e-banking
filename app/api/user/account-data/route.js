@@ -57,10 +57,39 @@ export async function GET(request) {
       });
     }
 
-    // Active session status check for non-admin accounts
+    // Active session status & token version check for non-admin accounts
     if (session.role !== 'admin') {
-      if (user.status === 'flagged') {
-        return new Response(JSON.stringify({ message: 'Account restricted. Please contact customer service.' }), {
+      const sessionVer = Number(session.tokenVersion) || 1;
+      const userVer = Number(user.tokenVersion) || 1;
+      if (sessionVer < userVer) {
+        return new Response(
+          JSON.stringify({ 
+            message: 'Session expired or logged out by administrator. Please log in again.',
+            loggedOut: true,
+          }),
+          {
+            status: 401,
+            headers: { 
+              'Content-Type': 'application/json',
+              'Set-Cookie': 'session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;',
+              'Cache-Control': 'no-store, max-age=0, must-revalidate',
+            },
+          }
+        );
+      }
+
+      if (user.status === 'blocked') {
+        return new Response(JSON.stringify({ message: 'Account is blocked by administration.', accountStatus: 'blocked' }), {
+          status: 403,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, max-age=0, must-revalidate',
+          },
+        });
+      }
+
+      if (user.status === 'suspended') {
+        return new Response(JSON.stringify({ message: 'Account is temporarily suspended.', accountStatus: 'suspended' }), {
           status: 403,
           headers: { 
             'Content-Type': 'application/json',

@@ -23,7 +23,11 @@ import {
   DollarSign,
   Eye,
   EyeOff,
-  TrendingUp
+  TrendingUp,
+  LogOut,
+  Ban,
+  PauseCircle,
+  ShieldAlert
 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { useRouter } from 'next/router';
@@ -59,6 +63,9 @@ const AdminUsersPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [noticeUser, setNoticeUser] = useState(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusUser, setStatusUser] = useState(null);
+  const [selectedStatus, setSelectedStatus] = useState('active');
   const [actionLoading, setActionLoading] = useState(false);
 
   // Forms state
@@ -227,20 +234,66 @@ const AdminUsersPage = () => {
     }
   };
 
-  const handleToggleStatus = async (user) => {
-    const nextStatus = user.status === 'active' ? 'flagged' : 'active';
+  const openStatusModal = (u) => {
+    setStatusUser(u);
+    setSelectedStatus(u.status || 'active');
+    setShowStatusModal(true);
+  };
+
+  const handleSaveStatus = async (e) => {
+    e.preventDefault();
+    if (!statusUser) return;
+    setActionLoading(true);
     try {
       const res = await fetch('/api/admin/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, status: nextStatus }),
+        body: JSON.stringify({ id: statusUser.id, status: selectedStatus }),
       });
-      if (res.ok) {
-        fetchUsers();
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || 'Failed to update account status.');
+        return;
       }
+      alert(`Account status for ${statusUser.name} updated to ${selectedStatus.toUpperCase()}.`);
+      setShowStatusModal(false);
+      fetchUsers();
     } catch (err) {
       console.error(err);
+      alert('Error updating status.');
+    } finally {
+      setActionLoading(false);
     }
+  };
+
+  const handleForceLogout = async (u) => {
+    if (!confirm(`Are you sure you want to log out ${u.name}? All active sessions across all devices will be immediately terminated.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: u.id, forceLogout: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || 'Failed to log out user.');
+        return;
+      }
+      alert(`User ${u.name} has been successfully logged out of all active sessions.`);
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+      alert('Error logging out user.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleStatus = (user) => {
+    openStatusModal(user);
   };
 
   const openEditModal = (u) => {
@@ -310,14 +363,27 @@ const AdminUsersPage = () => {
   };
 
   const getStatusBadge = (status) => {
+    const s = (status || 'active').toLowerCase();
     const styles = {
-      active: 'bg-green-100 text-green-700',
-      pending: 'bg-yellow-100 text-yellow-700',
-      flagged: 'bg-red-100 text-red-700',
+      active: 'bg-green-100 text-green-700 border-green-200',
+      inactive: 'bg-neutral-100 text-neutral-600 border-neutral-300',
+      pending: 'bg-amber-100 text-amber-800 border-amber-300 font-semibold',
+      flagged: 'bg-rose-100 text-rose-700 border-rose-200 font-semibold',
+      suspended: 'bg-amber-100 text-amber-800 border-amber-300 font-bold',
+      blocked: 'bg-red-100 text-red-700 border-red-300 font-bold',
+    };
+    const dotColors = {
+      active: 'bg-green-500',
+      inactive: 'bg-neutral-400',
+      pending: 'bg-amber-500',
+      flagged: 'bg-rose-500',
+      suspended: 'bg-amber-500',
+      blocked: 'bg-red-500',
     };
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${styles[status] || 'bg-neutral-100 text-neutral-700'}`}>
-        {status}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize border ${styles[s] || styles.active}`}>
+        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${dotColors[s] || dotColors.active}`}></span>
+        {s}
       </span>
     );
   };
@@ -550,7 +616,16 @@ const AdminUsersPage = () => {
                               <td className="py-3 px-4 font-semibold text-neutral-900">
                                 ${(Number(u.totalBalance) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
-                              <td className="py-3 px-4">{getStatusBadge(u.status)}</td>
+                              <td className="py-3 px-4">
+                                <button
+                                  type="button"
+                                  onClick={() => openStatusModal(u)}
+                                  className="hover:opacity-80 transition-opacity"
+                                  title="Click to manage account status"
+                                >
+                                  {getStatusBadge(u.status)}
+                                </button>
+                              </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="flex items-center justify-end space-x-2">
                                   <button
@@ -565,6 +640,13 @@ const AdminUsersPage = () => {
                                     <AlertTriangle className="w-4 h-4" />
                                   </button>
                                   <button
+                                    onClick={() => openStatusModal(u)}
+                                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                                    title="Manage Account Status (Block / Suspend / Activate)"
+                                  >
+                                    <ShieldAlert className="w-4 h-4" />
+                                  </button>
+                                  <button
                                     onClick={() => openEditModal(u)}
                                     className="p-1.5 text-primary-blue hover:bg-blue-50 rounded transition-colors"
                                     title="Edit User & Balance"
@@ -572,13 +654,11 @@ const AdminUsersPage = () => {
                                     <Edit className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => handleToggleStatus(u)}
-                                    className={`p-1.5 rounded transition-colors ${
-                                      u.status === 'active' ? 'text-amber-600 hover:bg-amber-50' : 'text-green-600 hover:bg-green-50'
-                                    }`}
-                                    title={u.status === 'active' ? 'Flag User' : 'Activate User'}
+                                    onClick={() => handleForceLogout(u)}
+                                    className="p-1.5 text-amber-700 hover:bg-amber-100 rounded transition-colors"
+                                    title="Force Log Out User (Terminate Session)"
                                   >
-                                    {u.status === 'active' ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                                    <LogOut className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteUser(u.id, u.name)}
@@ -645,7 +725,7 @@ const AdminUsersPage = () => {
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="flex items-center justify-end space-x-2 pt-1">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
                             <button
                               onClick={() => openNoticeModal(u)}
                               className={`flex items-center space-x-1 px-2.5 py-1.5 rounded text-xs font-semibold transition-colors ${
@@ -659,6 +739,15 @@ const AdminUsersPage = () => {
                             </button>
 
                             <button
+                              onClick={() => openStatusModal(u)}
+                              className="flex items-center space-x-1 px-2.5 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded text-xs font-semibold transition-colors"
+                              title="Block / Suspend / Activate"
+                            >
+                              <ShieldAlert className="w-3.5 h-3.5" />
+                              <span>Status</span>
+                            </button>
+
+                            <button
                               onClick={() => openEditModal(u)}
                               className="flex items-center space-x-1 px-2.5 py-1.5 bg-blue-50 text-primary-blue hover:bg-blue-100 rounded text-xs font-semibold transition-colors"
                             >
@@ -667,13 +756,11 @@ const AdminUsersPage = () => {
                             </button>
 
                             <button
-                              onClick={() => handleToggleStatus(u)}
-                              className={`p-1.5 rounded transition-colors ${
-                                u.status === 'active' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
-                              }`}
-                              title={u.status === 'active' ? 'Flag User' : 'Activate User'}
+                              onClick={() => handleForceLogout(u)}
+                              className="p-1.5 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded transition-colors"
+                              title="Force Log Out User"
                             >
-                              {u.status === 'active' ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                              <LogOut className="w-4 h-4" />
                             </button>
 
                             <button
@@ -754,7 +841,7 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-neutral-700 mb-1">Initial Balance ($) *</label>
                       <Input
@@ -794,6 +881,21 @@ const AdminUsersPage = () => {
                         <option value="Checking">Checking</option>
                         <option value="Savings">Savings</option>
                         <option value="Money Market">Money Market</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 mb-1">Account Status</label>
+                      <select
+                        value={newUser.status || 'active'}
+                        onChange={(e) => setNewUser({ ...newUser, status: e.target.value })}
+                        className="input-field text-sm"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="flagged">Flagged</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="blocked">Blocked</option>
                       </select>
                     </div>
                   </div>
@@ -1003,8 +1105,11 @@ const AdminUsersPage = () => {
                         className="input-field text-sm"
                       >
                         <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
                         <option value="pending">Pending</option>
                         <option value="flagged">Flagged</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="blocked">Blocked</option>
                       </select>
                     </div>
                   </div>
@@ -1227,6 +1332,132 @@ const AdminUsersPage = () => {
                     </Button>
                     <Button type="submit" disabled={actionLoading}>
                       {actionLoading ? 'Saving...' : 'Save Settings'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* MANAGE STATUS & FORCE LOGOUT MODAL */}
+          {showStatusModal && statusUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
+              <div className="bg-white rounded-card shadow-bank-lg max-w-md w-full p-6 relative">
+                <div className="flex justify-between items-center pb-4 border-b border-neutral-200 mb-4">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+                      <ShieldAlert className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-primary-navy">Account Status & Session</h3>
+                      <p className="text-xs text-neutral-500">{statusUser.name} • {statusUser.email}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowStatusModal(false)} className="text-neutral-400 hover:text-neutral-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveStatus} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-2">Select Account Status</label>
+                    <div className="space-y-2">
+                      {[
+                        {
+                          val: 'active',
+                          label: 'Active',
+                          desc: 'Full access to online banking, dashboard, and wire transfers.',
+                          badgeClass: 'bg-green-100 text-green-700 border-green-200',
+                          borderActive: 'border-green-500 bg-green-50/50',
+                        },
+                        {
+                          val: 'inactive',
+                          label: 'Inactive',
+                          desc: 'Account is dormant or inactive. Access restricted until reactivated.',
+                          badgeClass: 'bg-neutral-100 text-neutral-600 border-neutral-300',
+                          borderActive: 'border-neutral-500 bg-neutral-50/50',
+                        },
+                        {
+                          val: 'pending',
+                          label: 'Pending',
+                          desc: 'Account verification or approval pending.',
+                          badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+                          borderActive: 'border-amber-500 bg-amber-50/50',
+                        },
+                        {
+                          val: 'flagged',
+                          label: 'Flagged / Restricted',
+                          desc: 'Flagged for compliance review with warning notice enabled.',
+                          badgeClass: 'bg-rose-100 text-rose-700 border-rose-200',
+                          borderActive: 'border-rose-500 bg-rose-50/50',
+                        },
+                        {
+                          val: 'suspended',
+                          label: 'Suspended',
+                          desc: 'Temporarily freeze account. User cannot transact or view portfolio.',
+                          badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+                          borderActive: 'border-amber-500 bg-amber-50/50',
+                        },
+                        {
+                          val: 'blocked',
+                          label: 'Blocked',
+                          desc: 'Strict lockout. Access denied and all active sessions are revoked.',
+                          badgeClass: 'bg-red-100 text-red-700 border-red-300',
+                          borderActive: 'border-red-500 bg-red-50/50',
+                        },
+                      ].map((s) => (
+                        <label
+                          key={s.val}
+                          className={`flex items-start p-3 rounded-bank border cursor-pointer transition-all ${
+                            selectedStatus === s.val ? s.borderActive + ' shadow-sm' : 'border-neutral-200 hover:bg-neutral-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="userStatusRadio"
+                            value={s.val}
+                            checked={selectedStatus === s.val}
+                            onChange={() => setSelectedStatus(s.val)}
+                            className="mt-1 text-primary-navy focus:ring-primary-navy"
+                          />
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm font-bold text-neutral-800">{s.label}</span>
+                              <span className={`px-2 py-0.2 rounded-full text-[10px] font-semibold uppercase border ${s.badgeClass}`}>
+                                {s.val}
+                              </span>
+                            </div>
+                            <p className="text-xs text-neutral-500 mt-0.5">{s.desc}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Force Log Out Action Section */}
+                  <div className="p-3 bg-neutral-50 rounded-bank border border-neutral-200 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-neutral-800 flex items-center space-x-1.5">
+                        <LogOut className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Force Log Out User</span>
+                      </div>
+                      <p className="text-[11px] text-neutral-500">Terminate all active device sessions immediately.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleForceLogout(statusUser)}
+                      className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-xs font-semibold transition-colors"
+                    >
+                      Log Out Now
+                    </button>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4 border-t border-neutral-200">
+                    <Button variant="secondary" type="button" onClick={() => setShowStatusModal(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={actionLoading}>
+                      {actionLoading ? 'Saving...' : 'Apply Status'}
                     </Button>
                   </div>
                 </form>

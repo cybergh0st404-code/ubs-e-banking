@@ -110,7 +110,7 @@ export async function POST(request) {
       routingNumber: '026009593',
       type: accountType || 'Checking',
       balance: parsedBalance,
-      status: 'active',
+      status: newUser.status,
     };
 
     data.users = [...(data.users || []), newUser];
@@ -193,7 +193,10 @@ export async function PUT(request) {
     }
 
     let tokenVersion = Number(current.tokenVersion) || 1;
-    if (passwordChanged || status === 'flagged') {
+    const statusChanged = status !== undefined && status !== current.status;
+    const isRestricting = status === 'blocked' || status === 'suspended' || status === 'flagged';
+    const forceLogoutRequested = body.forceLogout === true || body.action === 'logout';
+    if (passwordChanged || (statusChanged && isRestricting) || forceLogoutRequested) {
       tokenVersion += 1;
     }
 
@@ -201,27 +204,36 @@ export async function PUT(request) {
       ? (body.createdAt || body.openingDate).trim()
       : current.createdAt;
 
+    const updatedStatus = status !== undefined ? String(status).trim().toLowerCase() : current.status;
+
     const updatedUser = {
       ...current,
       name: name !== undefined ? name.trim() : current.name,
       email: email !== undefined ? email.trim() : current.email,
       password: newPassword,
       twoFactorCode: newTwoFactorCode,
-      status: status !== undefined ? status : current.status,
+      status: updatedStatus,
       phone: phone !== undefined ? phone : current.phone,
       address: address !== undefined ? address : current.address,
       createdAt: newCreatedAt,
       tokenVersion,
     };
 
-    // Update name in user's accounts if name was changed
-    if (name) {
+    // Synchronize status and name in user's accounts
+    if (status !== undefined || name) {
       data.accounts = (data.accounts || []).map((acc) => {
         if (acc.userId === id) {
-          return { ...acc, userName: updatedUser.name };
+          return {
+            ...acc,
+            userName: name ? updatedUser.name : acc.userName,
+            status: status !== undefined ? updatedStatus : acc.status,
+          };
         }
         return acc;
       });
+    }
+
+    if (name) {
       data.transactions = (data.transactions || []).map((tx) => {
         if (tx.userId === id) {
           return { ...tx, userName: updatedUser.name };

@@ -118,7 +118,6 @@ const Dashboard = () => {
   const [balance, setBalance] = useState(0);
   const [accountNumber, setAccountNumber] = useState('CH-XXXX-XXXX-8504');
   const [fullAccountNumber, setFullAccountNumber] = useState('CH-78456321');
-  const [showAccountFull, setShowAccountFull] = useState(false);
   const [accountType, setAccountType] = useState('Premium / Multi-Currency');
   const [openingDate, setOpeningDate] = useState('Nov 03, 2025');
   const [recentTransactions, setRecentTransactions] = useState([]);
@@ -132,6 +131,8 @@ const Dashboard = () => {
   const [allowedPages, setAllowedPages] = useState(null);
   const [lockedPages, setLockedPages] = useState([]);
   const [lockedModalItem, setLockedModalItem] = useState(null);
+  const [accountRestriction, setAccountRestriction] = useState(null);
+  const [accountStatus, setAccountStatus] = useState(user?.status || 'active');
 
   // Interactive Modals
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -225,12 +226,16 @@ const Dashboard = () => {
           if (data.lockedPages !== undefined && Array.isArray(data.lockedPages)) {
             setLockedPages(data.lockedPages);
           }
-          if (updateUser && (data.allowedPages || data.lockedPages)) {
+          const fetchedStatus = (data.user?.status || data.primaryAccount?.status || user?.status || 'active').toLowerCase();
+          setAccountStatus(fetchedStatus);
+          if (updateUser) {
             updateUser({
               allowedPages: data.allowedPages || [],
               lockedPages: data.lockedPages || [],
+              status: fetchedStatus,
             });
           }
+          setAccountRestriction(null);
           if (data.notice && data.notice.enabled) {
             setNotice(data.notice);
             setShowNoticePopup(true);
@@ -238,6 +243,14 @@ const Dashboard = () => {
             setNotice(null);
             setShowNoticePopup(false);
           }
+        } else if (res.status === 401) {
+          logout();
+          router.push('/login?reason=timeout');
+        } else if (res.status === 403) {
+          const errData = await res.json().catch(() => ({}));
+          const restriction = errData.accountStatus || 'blocked';
+          setAccountRestriction(restriction);
+          setAccountStatus(restriction);
         }
       } catch (err) {
         console.error('Error fetching dashboard account data:', err);
@@ -305,6 +318,71 @@ const Dashboard = () => {
       return;
     }
     item.action();
+  };
+
+  const renderAccountStatusBadge = () => {
+    const s = (accountStatus || 'active').toLowerCase();
+
+    if (s === 'blocked') {
+      return (
+        <span className="flex items-center space-x-1.5 text-red-400 font-medium">
+          <span className="relative flex h-2 w-2">
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-[0_0_8px_#ef4444]" />
+          </span>
+          <span className="capitalize">Blocked</span>
+        </span>
+      );
+    }
+    if (s === 'suspended') {
+      return (
+        <span className="flex items-center space-x-1.5 text-amber-400 font-medium">
+          <span className="relative flex h-2 w-2">
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500 shadow-[0_0_8px_#f59e0b]" />
+          </span>
+          <span className="capitalize">Suspended</span>
+        </span>
+      );
+    }
+    if (s === 'flagged') {
+      return (
+        <span className="flex items-center space-x-1.5 text-rose-400 font-medium">
+          <span className="relative flex h-2 w-2">
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_8px_#f43f5e]" />
+          </span>
+          <span className="capitalize">Flagged</span>
+        </span>
+      );
+    }
+    if (s === 'pending') {
+      return (
+        <span className="flex items-center space-x-1.5 text-yellow-400 font-medium">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500 shadow-[0_0_8px_#eab308]" />
+          </span>
+          <span className="capitalize">Pending</span>
+        </span>
+      );
+    }
+    if (s === 'inactive') {
+      return (
+        <span className="flex items-center space-x-1.5 text-neutral-400 font-medium">
+          <span className="relative flex h-2 w-2">
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-neutral-500 shadow-[0_0_8px_#737373]" />
+          </span>
+          <span className="capitalize">Inactive</span>
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center space-x-1.5 text-green-400 font-medium">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_#22c55e]" />
+        </span>
+        <span className="capitalize">Active</span>
+      </span>
+    );
   };
 
   return (
@@ -717,19 +795,9 @@ const Dashboard = () => {
 
                     <div className="py-2.5 flex items-center justify-between">
                       <span className="text-neutral-400">Account Number:</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-neutral-200 tracking-wider">
-                          {!isBalanceVisible ? '••••••••••••' : (showAccountFull ? fullAccountNumber : accountNumber)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setShowAccountFull(!showAccountFull)}
-                          className="text-neutral-400 hover:text-amber-400 transition-colors p-0.5"
-                          title={showAccountFull ? "Hide account number" : "Reveal full account number"}
-                        >
-                          {showAccountFull ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
+                      <span className="font-mono text-neutral-200 tracking-wider">
+                        {!isBalanceVisible ? '••••••••••••' : accountNumber}
+                      </span>
                     </div>
 
                     <div className="py-2.5 flex items-center justify-between">
@@ -744,13 +812,7 @@ const Dashboard = () => {
 
                     <div className="py-2.5 flex items-center justify-between">
                       <span className="text-neutral-400">Account Status:</span>
-                      <span className="flex items-center space-x-1.5 text-green-400 font-medium">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_#22c55e]"></span>
-                        </span>
-                        <span>Active</span>
-                      </span>
+                      {renderAccountStatusBadge()}
                     </div>
 
                     <div className="py-2.5 flex items-center justify-between">
@@ -1153,6 +1215,38 @@ const Dashboard = () => {
         </main>
       </div>
 
+      {/* ======================= MODAL: ACCOUNT BLOCKED OR SUSPENDED ======================= */}
+      {accountRestriction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-md rounded-2xl border border-red-500/40 bg-gradient-to-b from-[#181119] via-[#120d14] to-[#0a070c] p-6 sm:p-7 shadow-2xl text-center">
+            <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center border shadow-xl ${
+              accountRestriction === 'blocked'
+                ? 'bg-red-500/20 border-red-500/40 text-red-400 shadow-[0_0_25px_rgba(230,0,0,0.35)]'
+                : 'bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.35)]'
+            }`}>
+              {accountRestriction === 'blocked' ? <ShieldAlert className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+            </div>
+            <h3 className="text-xl font-serif font-bold text-white mb-2">
+              {accountRestriction === 'blocked' ? 'Account Access Blocked' : 'Account Temporarily Suspended'}
+            </h3>
+            <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed mb-6">
+              {accountRestriction === 'blocked'
+                ? 'Your private wealth management account has been blocked by bank administration. All transaction capabilities and account operations have been restricted.'
+                : 'Your private banking operations have been temporarily suspended by your portfolio administrator. Please contact your administrator.'}
+            </p>
+            <button
+              onClick={() => {
+                logout();
+                router.push('/login');
+              }}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-bold text-xs uppercase tracking-widest hover:brightness-110 shadow-lg transition-all active:scale-95"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ======================= MODAL: ACCESS RESTRICTED / FEATURE LOCKED ======================= */}
       {lockedModalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
@@ -1164,21 +1258,12 @@ const Dashboard = () => {
               {lockedModalItem.label} Access Restricted
             </h3>
             <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed mb-5">
-              Access to <strong>{lockedModalItem.label}</strong> has been restricted on your private wealth portfolio by your portfolio administrator. Please contact your dedicated UBS Wealth Advisor to request access.
+              Access to <strong>{lockedModalItem.label}</strong> has been restricted on your private wealth portfolio by your portfolio administrator.
             </p>
-            <div className="space-y-2">
-              <button
-                onClick={() => {
-                  setLockedModalItem(null);
-                  setShowContactModal(true);
-                }}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-bold text-xs sm:text-sm hover:brightness-110 shadow-md transition-all active:scale-95"
-              >
-                Contact UBS Advisor
-              </button>
+            <div>
               <button
                 onClick={() => setLockedModalItem(null)}
-                className="w-full py-2 rounded-xl text-neutral-400 hover:text-white text-xs font-semibold hover:bg-neutral-800/50 transition-colors"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-bold text-xs sm:text-sm hover:brightness-110 shadow-md transition-all active:scale-95"
               >
                 Dismiss
               </button>
@@ -1212,24 +1297,14 @@ const Dashboard = () => {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-[#1b2130]">
                 <span className="text-neutral-400">Account Number</span>
-                <div className="flex items-center space-x-2">
-                  <span className="font-mono text-amber-200">
-                    {showAccountFull ? fullAccountNumber : accountNumber}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowAccountFull(!showAccountFull)}
-                    className="text-neutral-400 hover:text-amber-400 transition-colors p-0.5"
-                    title={showAccountFull ? "Hide account number" : "Reveal full account number"}
-                  >
-                    {showAccountFull ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                <span className="font-mono text-amber-200 tracking-wider">
+                  {accountNumber}
+                </span>
               </div>
               <div className="flex justify-between py-2 border-b border-[#1b2130]">
                 <span className="text-neutral-400">Swiss IBAN</span>
                 <span className="font-mono text-neutral-200">
-                  {showAccountFull ? 'CH93 0023 0784 5632 1000 0' : 'CH93 0023 XXXX XXXX XXXX X'}
+                  CH93 0023 XXXX XXXX XXXX X
                 </span>
               </div>
               <div className="flex justify-between py-2 border-b border-[#1b2130]">

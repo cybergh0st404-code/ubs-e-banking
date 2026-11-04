@@ -64,6 +64,9 @@ const Sidebar = ({ isAdmin = false }) => {
               lockedPages: data.lockedPages || [],
             });
           }
+        } else if (res.status === 401) {
+          logout();
+          router.push('/login?reason=timeout');
         }
       } catch (err) {
         console.error('Failed to sync sidebar pages:', err);
@@ -252,8 +255,7 @@ const Sidebar = ({ isAdmin = false }) => {
               {lockedModalItem}
             </p>
             <p className="text-xs text-neutral-300 text-center leading-relaxed mb-6">
-              This service is currently locked on your account by your private wealth administrator. 
-              Please contact your dedicated relationship manager or support to request access.
+              This service is currently locked on your account by your private wealth administrator.
             </p>
             <div className="flex space-x-3">
               <button
@@ -283,7 +285,7 @@ const Sidebar = ({ isAdmin = false }) => {
             <p className="text-sm text-neutral-300 leading-relaxed mb-6">
               {isCurrentPageLocked 
                 ? 'Access to this service has been restricted by your Swiss wealth administration team. You do not have authorization to view or initiate operations in this section.'
-                : 'This service is not enabled for your banking tier. Please contact your dedicated relationship manager to request access.'}
+                : 'This service is not enabled for your banking tier.'}
             </p>
             <button
               onClick={() => router.push('/dashboard')}

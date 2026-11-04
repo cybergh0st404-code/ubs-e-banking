@@ -78,14 +78,23 @@ export async function PUT(request) {
 
     const current = data.accounts[accIndex];
     const newBal = balance !== undefined ? parseFloat(balance) : current.balance;
+    const newStatus = status ? String(status).trim().toLowerCase() : current.status;
     const updated = {
       ...current,
       balance: newBal,
-      status: status || current.status,
+      status: newStatus,
       type: type || current.type,
       accountNumber: accountNumber || current.accountNumber,
     };
     data.accounts[accIndex] = updated;
+
+    // Sync status back to user record if status was updated
+    if (status && current.userId) {
+      const uIdx = (data.users || []).findIndex((u) => u.id === current.userId);
+      if (uIdx !== -1) {
+        data.users[uIdx].status = newStatus;
+      }
+    }
 
     // Update or create initial deposit transaction date if provided
     const depositDate = body.initialDepositDate || body.depositDate;

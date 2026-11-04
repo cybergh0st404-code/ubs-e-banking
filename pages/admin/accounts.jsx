@@ -41,6 +41,7 @@ const AdminAccountsPage = () => {
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [newBalance, setNewBalance] = useState('');
+  const [accountStatus, setAccountStatus] = useState('active');
   const [depositDate, setDepositDate] = useState('');
   const [openingDate, setOpeningDate] = useState('');
   const [savingBalance, setSavingBalance] = useState(false);
@@ -85,11 +86,38 @@ const AdminAccountsPage = () => {
     fetchAccounts();
   }, []);
 
+  const getStatusBadge = (status) => {
+    const s = (status || 'active').toLowerCase();
+    const styles = {
+      active: 'bg-green-100 text-green-700 border-green-200',
+      inactive: 'bg-neutral-100 text-neutral-600 border-neutral-300',
+      pending: 'bg-amber-100 text-amber-800 border-amber-300 font-semibold',
+      flagged: 'bg-rose-100 text-rose-700 border-rose-200 font-semibold',
+      suspended: 'bg-amber-100 text-amber-800 border-amber-300 font-bold',
+      blocked: 'bg-red-100 text-red-700 border-red-300 font-bold',
+    };
+    const dotColors = {
+      active: 'bg-green-500',
+      inactive: 'bg-neutral-400',
+      pending: 'bg-amber-500',
+      flagged: 'bg-rose-500',
+      suspended: 'bg-amber-500',
+      blocked: 'bg-red-500',
+    };
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold capitalize border ${styles[s] || styles.active}`}>
+        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${dotColors[s] || dotColors.active}`} />
+        {s}
+      </span>
+    );
+  };
+
   const openBalanceModal = (acc) => {
     setSelectedAccount(acc);
     setNewBalance(String(acc.balance));
     setDepositDate(acc.initialDepositDate || new Date().toISOString().split('T')[0]);
     setOpeningDate(acc.openingDate || new Date().toISOString().split('T')[0]);
+    setAccountStatus(acc.status || 'active');
     setShowBalanceModal(true);
   };
 
@@ -104,20 +132,21 @@ const AdminAccountsPage = () => {
         body: JSON.stringify({
           id: selectedAccount.id,
           balance: parseFloat(newBalance) || 0,
+          status: accountStatus,
           initialDepositDate: depositDate,
           openingDate: openingDate,
         }),
       });
       if (res.ok) {
-        alert('Account balance updated successfully!');
+        alert('Account updated successfully!');
         setShowBalanceModal(false);
         fetchAccounts();
       } else {
-        alert('Failed to update balance.');
+        alert('Failed to update account.');
       }
     } catch (err) {
       console.error(err);
-      alert('Error updating balance.');
+      alert('Error updating account.');
     } finally {
       setSavingBalance(false);
     }
@@ -323,11 +352,7 @@ const AdminAccountsPage = () => {
                             ${Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                              account.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                            }`}>
-                              {account.status}
-                            </span>
+                            {getStatusBadge(account.status)}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end space-x-2">
@@ -370,9 +395,12 @@ const AdminAccountsPage = () => {
                           <div className="font-bold text-neutral-900 text-sm">{account.userName}</div>
                           <div className="font-mono text-xs text-neutral-500">{account.accountNumber}</div>
                         </div>
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                          {account.type}
-                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                            {account.type}
+                          </span>
+                          {getStatusBadge(account.status)}
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-bank border border-neutral-200">
@@ -466,6 +494,22 @@ const AdminAccountsPage = () => {
                     className="input-field text-sm"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">Account Status</label>
+                <select
+                  value={accountStatus}
+                  onChange={(e) => setAccountStatus(e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="pending">Pending</option>
+                  <option value="flagged">Flagged</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="blocked">Blocked</option>
+                </select>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4 border-t border-neutral-200">
