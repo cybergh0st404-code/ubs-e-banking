@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { Bell, User, Menu, X, ChevronDown, LogOut, Settings } from 'lucide-react';
+import { Bell, User, Menu, X, ChevronDown, LogOut, Settings, AlertCircle, Mail } from 'lucide-react';
 import { useRouter } from 'next/router';
 
 const Navbar = ({ user, onLogout }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
   const router = useRouter();
 
   const handleLogout = () => {
+    const isRegAdmin = user?.role === 'admin';
     if (onLogout) {
       onLogout();
     }
-    router.push('/login');
+    router.push(isRegAdmin ? '/admin/login' : '/login');
   };
 
   const handleToggleSidebar = () => {
@@ -18,6 +20,8 @@ const Navbar = ({ user, onLogout }) => {
       window.dispatchEvent(new CustomEvent('toggle-bank-sidebar'));
     }
   };
+
+  const hasNoticeMessage = Boolean(user?.notice && (user.notice.sendAsMessage || user.notice.enabled) && user.notice.message);
 
   return (
     <nav className="bg-white border-b border-neutral-200 shadow-sm sticky top-0 z-40">
@@ -53,19 +57,96 @@ const Navbar = ({ user, onLogout }) => {
           {/* Right side: Notifications & Profile Menu */}
           <div className="flex items-center space-x-2 sm:space-x-4">
             {/* Notifications */}
-            <button 
-              onClick={() => router.push('/messages')}
-              className="relative p-2 text-neutral-600 hover:text-primary-blue hover:bg-accent-soft rounded-full transition-colors"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent-red rounded-full"></span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => {
+                  setShowNotifMenu(!showNotifMenu);
+                  setShowProfileMenu(false);
+                }}
+                className="relative p-2 text-neutral-600 hover:text-primary-blue hover:bg-accent-soft rounded-full transition-colors"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                <span className={`absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-accent-red rounded-full ${hasNoticeMessage ? 'animate-ping' : ''}`}></span>
+                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-accent-red rounded-full"></span>
+              </button>
+
+              {showNotifMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowNotifMenu(false)}
+                  ></div>
+                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-card shadow-bank-lg border border-neutral-200 py-2 z-20 animate-fade-in">
+                    <div className="px-4 py-2 border-b border-neutral-100 flex items-center justify-between">
+                      <span className="text-xs font-bold text-primary-navy uppercase tracking-wider">Notifications & Messages</span>
+                      <span className="text-[10px] font-semibold bg-blue-50 text-primary-blue px-2 py-0.5 rounded-full">
+                        {hasNoticeMessage ? '2 Alerts' : '1 Alert'}
+                      </span>
+                    </div>
+
+                    <div className="max-h-72 overflow-y-auto divide-y divide-neutral-100">
+                      {hasNoticeMessage && (
+                        <div
+                          onClick={() => {
+                            setShowNotifMenu(false);
+                            router.push('/messages?open=notice');
+                          }}
+                          className="p-3.5 bg-blue-50/60 hover:bg-blue-100/60 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-accent-red text-white px-2 py-0.5 rounded-full">
+                              New Notice
+                            </span>
+                            <span className="text-[10px] text-neutral-500">{user.notice.sentDate || 'Today'}</span>
+                          </div>
+                          <div className="text-xs font-bold text-primary-navy">
+                            {user.notice.subject || user.notice.progressLabel || 'Official Account & Compliance Notice'}
+                          </div>
+                          <p className="text-xs text-neutral-600 line-clamp-2 mt-0.5">
+                            {user.notice.message}
+                          </p>
+                        </div>
+                      )}
+
+                      <div
+                        onClick={() => {
+                          setShowNotifMenu(false);
+                          router.push('/messages');
+                        }}
+                        className="p-3.5 hover:bg-neutral-50 cursor-pointer transition-colors"
+                      >
+                        <div className="text-xs font-semibold text-neutral-800">Welcome to your Preferred Online Banking Portal</div>
+                        <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-2">
+                          Your accounts and security monitoring facilities are active.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="px-3 pt-2 pb-1 border-t border-neutral-100">
+                      <button
+                        onClick={() => {
+                          setShowNotifMenu(false);
+                          router.push('/messages');
+                        }}
+                        className="w-full py-1.5 text-xs font-semibold text-primary-blue hover:bg-blue-50 rounded-bank transition-colors flex items-center justify-center space-x-1.5"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Open Secure Message Center</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Profile Menu */}
             <div className="relative">
               <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                onClick={() => {
+                  setShowProfileMenu(!showProfileMenu);
+                  setShowNotifMenu(false);
+                }}
                 className="flex items-center space-x-2 px-2 sm:px-3 py-1.5 sm:py-2 text-neutral-700 hover:bg-accent-soft rounded-bank transition-colors"
               >
                 <div className="w-8 h-8 bg-primary-blue rounded-full flex items-center justify-center text-white font-semibold text-xs sm:text-sm shadow-sm">

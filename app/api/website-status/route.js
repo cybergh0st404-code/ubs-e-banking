@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
-import { requireAdmin } from '../../../lib/security.js';
+import { requireSuperAdmin } from '../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -77,10 +77,10 @@ export async function GET() {
 
 export async function PUT(request) {
   try {
-    const auth = await requireAdmin(request);
+    const auth = await requireSuperAdmin(request);
     if (!auth.authorized) {
-      return new Response(JSON.stringify({ message: auth.error || 'Unauthorized' }), {
-        status: auth.status || 401,
+      return new Response(JSON.stringify({ message: auth.error || 'Only Super Admin can change website lock status.' }), {
+        status: auth.status || 403,
         headers: { 'Content-Type': 'application/json' },
       });
     }

@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, DEFAULT_ALLOWED_PAGES, normalizePagesList } from '../../../../lib/db.js';
+import { getBankData, saveBankData, DEFAULT_ALLOWED_PAGES, normalizePagesList, resolveAdminContext } from '../../../../lib/db.js';
 import { requireAdmin, hashPassword, hashTwoFactorCode } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,24 @@ export async function GET(request) {
     }
 
     const data = await getBankData();
-    const usersWithAccounts = (data.users || []).map((user) => {
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const allAdminsMap = {};
+    (data.users || []).forEach((u) => {
+      if (u.role === 'admin' || u.role === 'superadmin') {
+        allAdminsMap[u.id] = u.name || u.email;
+      }
+    });
+
+    const visibleClientUsers = (data.users || []).filter((user) => ctx.canAccessUser(user));
+
+    const usersWithAccounts = visibleClientUsers.map((user) => {
       const userAccounts = (data.accounts || []).filter((a) => a.userId === user.id);
       const totalBalance = userAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
       const userTransactions = (data.transactions || []).filter((t) => t.userId === user.id);
@@ -23,22 +40,41 @@ export async function GET(request) {
         (t) => (t.description?.toLowerCase().includes('initial') || t.category === 'Deposit') && t.type === 'credit'
       ) || userTransactions.find((t) => t.type === 'credit');
       const initialDepositDate = initialDepositTx ? initialDepositTx.date : (user.createdAt || new Date().toISOString().split('T')[0]);
+      const resolvedAdminName =
+        user.createdByAdminName ||
+        (user.createdByAdminId && allAdminsMap[user.createdByAdminId]) ||
+        'Super Administrator';
+
       return {
         ...user,
+        createdByAdminId: user.createdByAdminId || 'admin-1',
+        createdByAdminName: resolvedAdminName,
         accountsCount: userAccounts.length,
         totalBalance,
         primaryAccount: userAccounts[0] || null,
         initialDepositDate,
       };
     });
-    return new Response(JSON.stringify({ users: usersWithAccounts }), {
-      status: 200,
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store, max-age=0, must-revalidate',
-        'Pragma': 'no-cache',
-      },
-    });
+
+    return new Response(
+      JSON.stringify({
+        users: usersWithAccounts,
+        adminContext: {
+          isSuperAdmin: ctx.isSuperAdmin,
+          adminId: ctx.adminId,
+          adminName: ctx.adminName,
+          permissions: ctx.permissions,
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, max-age=0, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      }
+    );
   } catch (err) {
     console.error('Error fetching admin users:', err);
     return new Response(JSON.stringify({ message: 'Failed to fetch users.' }), {
@@ -58,6 +94,22 @@ export async function POST(request) {
       });
     }
 
+    const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!ctx.hasPerm('canCreateUsers')) {
+      return new Response(
+        JSON.stringify({ message: 'Access Denied: Super Admin has not granted you permission to onboard new users.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const body = await request.json();
     const { name, email, password, twoFactorCode, initialBalance, accountType, status } = body;
 
@@ -68,7 +120,6 @@ export async function POST(request) {
       });
     }
 
-    const data = await getBankData();
     const existing = (data.users || []).find((u) => u.email.toLowerCase() === email.toLowerCase());
     if (existing) {
       return new Response(JSON.stringify({ message: 'A user with this email already exists.' }), {
@@ -81,6 +132,14 @@ export async function POST(request) {
     const hashedPassword = await hashPassword(password.trim());
     const raw2FACode = twoFactorCode ? twoFactorCode.trim() : Math.floor(100000 + Math.random() * 900000).toString();
     const hashed2FACode = await hashTwoFactorCode(raw2FACode);
+
+    let ownerAdminId = ctx.adminId;
+    let ownerAdminName = ctx.adminName;
+    if (ctx.isSuperAdmin && body.createdByAdminId) {
+      ownerAdminId = body.createdByAdminId;
+      const targetAdm = (data.users || []).find((u) => u.id === body.createdByAdminId && u.role === 'admin');
+      ownerAdminName = targetAdm ? targetAdm.name : 'Super Administrator';
+    }
 
     const newUser = {
       id: userId,
@@ -96,6 +155,8 @@ export async function POST(request) {
       lockedPages: Array.isArray(body.lockedPages) ? normalizePagesList(body.lockedPages) : [],
       tokenVersion: 1,
       createdAt: (body.createdAt || body.openingDate || new Date().toISOString().split('T')[0]).trim(),
+      createdByAdminId: ownerAdminId,
+      createdByAdminName: ownerAdminName,
     };
 
     const parsedBalance = parseFloat(initialBalance) || 0;
@@ -171,6 +232,14 @@ export async function PUT(request) {
     }
 
     const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const userIndex = (data.users || []).findIndex((u) => u.id === id);
     if (userIndex === -1) {
       return new Response(JSON.stringify({ message: 'User not found.' }), {
@@ -180,6 +249,36 @@ export async function PUT(request) {
     }
 
     const current = data.users[userIndex];
+    if (!ctx.canAccessUser(current)) {
+      return new Response(JSON.stringify({ message: 'Access denied: You can only manage users you onboarded.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Check granular permissions for the requested updates
+    const isEditingProfile = name !== undefined || email !== undefined || password !== undefined || twoFactorCode !== undefined || phone !== undefined || address !== undefined;
+    const isEditingStatusOrLogout = (status !== undefined && status !== current.status) || body.forceLogout === true || body.action === 'logout';
+    const isEditingNotices = body.notice !== undefined;
+    const isEditingMenus = body.allowedPages !== undefined || body.lockedPages !== undefined;
+    const isEditingBalanceOrDates = (balance !== undefined && balance !== '') || body.initialDepositDate !== undefined || body.depositDate !== undefined;
+
+    if (isEditingProfile && !ctx.hasPerm('canEditUsers')) {
+      return new Response(JSON.stringify({ message: 'You do not have permission to edit user details.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (isEditingStatusOrLogout && !ctx.hasPerm('canManageStatus')) {
+      return new Response(JSON.stringify({ message: 'You do not have permission to change account status or force log out users.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (isEditingNotices && !ctx.hasPerm('canManageNotices')) {
+      return new Response(JSON.stringify({ message: 'You do not have permission to manage user notices and restrictions.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (isEditingMenus && !ctx.hasPerm('canManageMenus')) {
+      return new Response(JSON.stringify({ message: 'You do not have permission to manage user menu access.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (isEditingBalanceOrDates && !ctx.hasPerm('canManageBalances')) {
+      return new Response(JSON.stringify({ message: 'You do not have permission to modify account balances or deposit dates.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+
     let newPassword = current.password;
     let passwordChanged = false;
     if (password !== undefined && password !== '' && !password.startsWith('pbkdf2:')) {
@@ -244,9 +343,16 @@ export async function PUT(request) {
 
     // If notice settings were provided, update user notice
     if (body.notice !== undefined) {
+      const now = new Date();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const formattedDate = `${months[now.getMonth()]} ${String(now.getDate()).padStart(2, '0')}, ${now.getFullYear()}`;
+      const formattedTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
       updatedUser.notice = {
         ...(current.notice || {}),
         ...body.notice,
+        sentDate: body.notice.sendAsMessage ? (body.notice.sentDate || formattedDate) : (current.notice?.sentDate || formattedDate),
+        sentTime: body.notice.sendAsMessage ? (body.notice.sentTime || formattedTime) : (current.notice?.sentTime || formattedTime),
       };
     }
 
@@ -258,6 +364,17 @@ export async function PUT(request) {
     // If lockedPages settings were provided, update user lockedPages
     if (body.lockedPages !== undefined && Array.isArray(body.lockedPages)) {
       updatedUser.lockedPages = normalizePagesList(body.lockedPages);
+    }
+
+    // Super Admin can reassign which Admin owns this user
+    if (ctx.isSuperAdmin && body.createdByAdminId !== undefined) {
+      updatedUser.createdByAdminId = body.createdByAdminId;
+      if (body.createdByAdminId === 'admin-1') {
+        updatedUser.createdByAdminName = 'Super Administrator';
+      } else {
+        const assignedAdmin = (data.users || []).find((u) => u.id === body.createdByAdminId);
+        updatedUser.createdByAdminName = assignedAdmin ? assignedAdmin.name : (body.createdByAdminName || 'Admin');
+      }
     }
 
     data.users[userIndex] = updatedUser;
@@ -344,6 +461,36 @@ export async function DELETE(request) {
     }
 
     const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!ctx.hasPerm('canDeleteUsers')) {
+      return new Response(JSON.stringify({ message: 'You do not have permission to delete users.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const targetUser = (data.users || []).find((u) => u.id === id);
+    if (!targetUser) {
+      return new Response(JSON.stringify({ message: 'User not found.' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!ctx.canAccessUser(targetUser)) {
+      return new Response(JSON.stringify({ message: 'Access denied: You can only delete users you onboarded.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     data.users = (data.users || []).filter((u) => u.id !== id);
     data.accounts = (data.accounts || []).filter((a) => a.userId !== id);
     data.transactions = (data.transactions || []).filter((t) => t.userId !== id);

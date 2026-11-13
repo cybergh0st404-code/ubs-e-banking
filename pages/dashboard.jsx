@@ -139,6 +139,8 @@ const Dashboard = () => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showInvestmentsModal, setShowInvestmentsModal] = useState(false);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [inboxNotice, setInboxNotice] = useState(null);
 
   // Authenticate user
   useEffect(() => {
@@ -237,9 +239,15 @@ const Dashboard = () => {
               allowedPages: data.allowedPages || [],
               lockedPages: data.lockedPages || [],
               status: fetchedStatus,
+              notice: data.notice || null,
             });
           }
           setAccountRestriction(null);
+          if (data.notice && (data.notice.sendAsMessage || data.notice.enabled)) {
+            setInboxNotice(data.notice);
+          } else {
+            setInboxNotice(null);
+          }
           if (data.notice && data.notice.enabled) {
             setNotice(data.notice);
             if (data.notice.showPopup !== false) {
@@ -630,19 +638,14 @@ const Dashboard = () => {
               
               {/* Mail / Notifications icon */}
               <button 
-                onClick={() => {
-                  if (isFeatureRestricted('messages')) {
-                    setLockedModalItem({ label: 'Secure Messages' });
-                    return;
-                  }
-                  router.push('/messages');
-                }}
+                onClick={() => setShowNotificationsModal(true)}
                 className="relative p-2.5 rounded-full text-neutral-300 hover:text-amber-300 hover:bg-[#141824] border border-transparent hover:border-amber-500/30 transition-all duration-200"
-                aria-label="Messages"
+                aria-label="Messages & Notifications"
+                title="View Notifications & Secure Messages"
               >
                 <Mail className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#e60000] text-white text-[9px] font-bold flex items-center justify-center shadow-[0_0_8px_rgba(230,0,0,0.6)]">
-                  1
+                <span className={`absolute top-1 right-1 w-4 h-4 rounded-full bg-[#e60000] text-white text-[9px] font-bold flex items-center justify-center shadow-[0_0_8px_rgba(230,0,0,0.6)] ${inboxNotice ? 'animate-pulse' : ''}`}>
+                  {inboxNotice ? 2 : 1}
                 </span>
               </button>
 
@@ -1523,6 +1526,105 @@ const Dashboard = () => {
               </button>
               <button
                 onClick={() => setShowInvestmentsModal(false)}
+                className="py-2.5 px-4 rounded-xl border border-neutral-700 text-neutral-300 font-semibold text-xs sm:text-sm hover:bg-neutral-800 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL 5: NOTIFICATIONS & MESSAGES INBOX ======================= */}
+      {showNotificationsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-500/40 bg-gradient-to-b from-[#131722] via-[#0e111a] to-[#090b10] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9),0_0_30px_rgba(212,175,55,0.15)] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-[#22293a]">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif font-semibold text-white tracking-wide">Notifications & Messages</h3>
+                  <p className="text-[11px] text-neutral-400">Official alerts & encrypted client correspondence</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowNotificationsModal(false)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-[#181d2c]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-3">
+              {inboxNotice && (
+                <div className="p-4 rounded-xl bg-gradient-to-br from-red-950/60 via-[#1b1118] to-[#121622] border border-red-500/50 shadow-[0_0_20px_rgba(230,0,0,0.15)] space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-0.5 rounded-full bg-[#e60000] text-white text-[10px] font-bold uppercase tracking-wider">
+                        New Notice
+                      </span>
+                      <span className="text-xs font-semibold text-amber-300">
+                        {inboxNotice.sender || 'UBS Wealth Management & Compliance'}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-neutral-400 font-mono">
+                      {inboxNotice.sentDate || 'Today'} {inboxNotice.sentTime ? `• ${inboxNotice.sentTime}` : ''}
+                    </span>
+                  </div>
+
+                  <h4 className="text-sm font-bold text-white font-serif">
+                    {inboxNotice.subject || inboxNotice.progressLabel || 'Official Account & Compliance Notice'}
+                  </h4>
+
+                  <div className="text-xs sm:text-sm text-neutral-200 whitespace-pre-line leading-relaxed bg-black/30 p-3 rounded-lg border border-white/10">
+                    {inboxNotice.message}
+                  </div>
+
+                  {inboxNotice.enabled && (
+                    <div className="pt-1">
+                      <div className="flex justify-between text-[11px] font-semibold text-neutral-300 mb-1">
+                        <span>{inboxNotice.progressLabel || 'Authorization Progress'}</span>
+                        <span className="text-red-400">{inboxNotice.progressStatus || `${inboxNotice.progress || 65}%`}</span>
+                      </div>
+                      <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-red-500 rounded-full" style={{ width: `${inboxNotice.progress || 65}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Standard Welcome / Security Notification */}
+              <div className="p-3.5 rounded-xl bg-[#141824] border border-[#232a3d] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-amber-300">UBS Executive Client Care</span>
+                  <span className="text-[10px] text-neutral-400">Encrypted Notice</span>
+                </div>
+                <p className="text-xs font-semibold text-white">Welcome to your Preferred Online Banking Portal</p>
+                <p className="text-xs text-neutral-400 leading-relaxed">
+                  Your multi-currency wealth management account and security monitoring facilities are active.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#22293a] flex items-center justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowNotificationsModal(false);
+                  if (isFeatureRestricted('messages')) {
+                    setLockedModalItem({ label: 'Secure Messages' });
+                    return;
+                  }
+                  router.push(inboxNotice ? '/messages?open=notice' : '/messages');
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-bold text-xs sm:text-sm hover:brightness-110 transition-all text-center"
+              >
+                Open Secure Message Center
+              </button>
+              <button
+                onClick={() => setShowNotificationsModal(false)}
                 className="py-2.5 px-4 rounded-xl border border-neutral-700 text-neutral-300 font-semibold text-xs sm:text-sm hover:bg-neutral-800 transition-colors"
               >
                 Close

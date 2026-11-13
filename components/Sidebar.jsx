@@ -24,7 +24,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../utils/AuthContext';
-import { DEFAULT_CORE_MENU_IDS, normalizeMenuIds } from '../lib/navigationConfig.js';
+import { DEFAULT_CORE_MENU_IDS, normalizeMenuIds, hasAdminPermission } from '../lib/navigationConfig.js';
 
 const Sidebar = ({ isAdmin = false }) => {
   const router = useRouter();
@@ -95,11 +95,16 @@ const Sidebar = ({ isAdmin = false }) => {
     { id: 'security', path: '/security', icon: Shield, label: 'Security & Sessions' },
   ];
 
-  const adminMenuItems = [
-    { id: 'admin-users', path: '/admin', icon: Users, label: 'User Management' },
-    { id: 'admin-accounts', path: '/admin/accounts', icon: CreditCard, label: 'All Accounts' },
-    { id: 'admin-transactions', path: '/admin/transactions', icon: History, label: 'All Transactions' },
+  const adminBasePath = user?.role === 'superadmin' ? '/super-admin' : '/admin';
+  const rawAdminMenuItems = [
+    { id: 'admin-users', path: adminBasePath, icon: Users, label: user?.role === 'superadmin' ? 'Users & Admins' : 'My Users' },
+    { id: 'admin-accounts', path: `${adminBasePath}/accounts`, icon: CreditCard, label: user?.role === 'superadmin' ? 'All Accounts' : 'User Accounts', perm: 'canViewAccounts' },
+    { id: 'admin-transactions', path: `${adminBasePath}/transactions`, icon: History, label: user?.role === 'superadmin' ? 'All Transactions' : 'User Transactions', perm: 'canViewTransactions' },
   ];
+
+  const adminMenuItems = rawAdminMenuItems.filter(
+    (item) => !item.perm || hasAdminPermission(user, item.perm)
+  );
 
   // Filter items by allowed pages if user is not admin
   const userMenuItems = allowedPages && Array.isArray(allowedPages)
@@ -127,7 +132,7 @@ const Sidebar = ({ isAdmin = false }) => {
       {menuItems.map((item) => {
         const Icon = item.icon;
         const isActive = isAdmin
-          ? router.pathname.startsWith(item.path) || (item.path === '/admin' && router.pathname === '/admin')
+          ? (item.path === adminBasePath ? router.pathname === adminBasePath : router.pathname.startsWith(item.path))
           : router.pathname === item.path;
         const isLocked = !isAdmin && lockedPages.includes(item.id);
 
@@ -205,7 +210,9 @@ const Sidebar = ({ isAdmin = false }) => {
               </div>
               <div className="overflow-hidden">
                 <div className="text-xs font-bold text-primary-navy truncate">{user.name || 'Account Holder'}</div>
-                <div className="text-[11px] text-neutral-500 truncate">{isAdmin ? 'Administrator' : user.email}</div>
+                <div className="text-[11px] text-neutral-500 truncate">
+                  {isAdmin ? (user.role === 'superadmin' ? 'Super Administrator' : 'Administrator') : user.email}
+                </div>
               </div>
             </div>
           )}

