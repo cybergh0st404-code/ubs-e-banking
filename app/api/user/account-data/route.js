@@ -1,4 +1,4 @@
-import { getBankData } from '../../../../lib/db.js';
+import { getBankData, resolveAdminContext } from '../../../../lib/db.js';
 import { getSessionFromRequest } from '../../../../lib/security.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -24,29 +24,65 @@ export async function GET(request) {
     const queryUserId = searchParams.get('userId');
     const queryEmail = searchParams.get('email');
 
-    let effectiveId = null;
-    let effectiveEmail = null;
-
-    const isAdminSession = session.role === 'admin' || session.role === 'superadmin';
-
-    if (isAdminSession) {
-      effectiveId = queryUserId || session.id;
-      effectiveEmail = queryEmail || session.email;
-    } else {
-      effectiveId = session.id;
-      effectiveEmail = session.email;
-    }
+    const isSuperAdmin = session.role === 'superadmin';
+    const isRegularAdmin = session.role === 'admin';
+    const isAdminSession = isSuperAdmin || isRegularAdmin;
 
     const data = await getBankData();
-    let user = (data.users || []).find((u) => 
-      (effectiveId && u.id === effectiveId) || 
-      (effectiveEmail && u.email?.toLowerCase() === effectiveEmail?.toLowerCase())
-    );
 
-    // If an administrator is viewing or testing the dashboard and no matching admin-user exists in users table,
-    // default to the primary client user so the administrator can preview live user settings and UI
-    if (!user && isAdminSession && data.users && data.users.length > 0) {
-      user = data.users[0];
+    let user = null;
+
+    if (isSuperAdmin) {
+      const effectiveId = queryUserId || session.id;
+      const effectiveEmail = queryEmail || session.email;
+      user = (data.users || []).find((u) => 
+        (effectiveId && u.id === effectiveId) || 
+        (effectiveEmail && u.email?.toLowerCase() === effectiveEmail?.toLowerCase())
+      );
+      if (!user && (data.users || []).length > 0) {
+        user = (data.users || []).find((u) => u.role !== 'admin' && u.role !== 'superadmin') || data.users[0];
+      }
+    } else if (isRegularAdmin) {
+      const ctx = resolveAdminContext(session, data);
+      if (!ctx.valid) {
+        return new Response(JSON.stringify({ message: ctx.error || 'Administrator session invalid or suspended.' }), {
+          status: ctx.status || 403,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, max-age=0, must-revalidate',
+          },
+        });
+      }
+
+      if (queryUserId || queryEmail) {
+        const target = (data.users || []).find((u) =>
+          (queryUserId && u.id === queryUserId) ||
+          (queryEmail && u.email?.toLowerCase() === queryEmail?.toLowerCase())
+        );
+        if (target) {
+          if (!ctx.canAccessUser(target)) {
+            return new Response(JSON.stringify({ message: 'Access denied: You do not have permission to view another administrator\'s users.' }), {
+              status: 403,
+              headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store, max-age=0, must-revalidate',
+              },
+            });
+          }
+          user = target;
+        }
+      }
+
+      if (!user) {
+        // Find the first user onboarded by this specific administrator
+        user = (data.users || []).find((u) => ctx.canAccessUser(u)) || null;
+      }
+    } else {
+      // Regular client user: strictly bind to the authenticated session identity
+      user = (data.users || []).find((u) => 
+        (session.id && u.id === session.id) || 
+        (session.email && u.email?.toLowerCase() === session.email?.toLowerCase())
+      );
     }
 
     if (!user) {

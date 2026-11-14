@@ -1,4 +1,12 @@
-import { findUserByEmail, getBankData, saveBankData } from '../../../../lib/db.js';
+import {
+  findUserByEmail,
+  getBankData,
+  saveBankData,
+  checkPersistedRateLimit,
+  recordPersistedFailedAttempt,
+  clearPersistedRateLimit,
+  getSuperAdminTokenVersion,
+} from '../../../../lib/db.js';
 import {
   verifyPassword,
   hashPassword,
@@ -15,6 +23,23 @@ import {
   verifyTwoFactorChallenge,
   verifyRequestOrigin,
 } from '../../../../lib/security.js';
+
+async function checkAuthRateLimit(key, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
+  const mem = checkRateLimit(key, maxAttempts, windowMs);
+  if (!mem.allowed) return mem;
+  const dbRate = await checkPersistedRateLimit(key, maxAttempts, windowMs);
+  return dbRate;
+}
+
+async function recordAuthFailure(key, windowMs = 15 * 60 * 1000) {
+  recordFailedAttempt(key, windowMs);
+  await recordPersistedFailedAttempt(key, windowMs);
+}
+
+async function clearAuthRateLimit(key) {
+  clearRateLimit(key);
+  await clearPersistedRateLimit(key);
+}
 
 import fs from 'fs';
 import path from 'path';
@@ -71,9 +96,9 @@ export async function POST(request) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // -------------------------------------------------------------------------
-    // Rate Limiting Checks (5 attempts per 15 minutes window)
+    // Rate Limiting Checks (5 attempts per 15 minutes window - Persisted in DB)
     // -------------------------------------------------------------------------
-    const ipRate = checkRateLimit(`ip:${clientIp}`, 5, 15 * 60 * 1000);
+    const ipRate = await checkAuthRateLimit(`ip:${clientIp}`, 5, 15 * 60 * 1000);
     if (!ipRate.allowed) {
       return new Response(
         JSON.stringify({
@@ -90,7 +115,7 @@ export async function POST(request) {
     }
 
     if (normalizedEmail) {
-      const accountRate = checkRateLimit(`account:${normalizedEmail}`, 5, 15 * 60 * 1000);
+      const accountRate = await checkAuthRateLimit(`account:${normalizedEmail}`, 5, 15 * 60 * 1000);
       if (!accountRate.allowed) {
         return new Response(
           JSON.stringify({
@@ -119,8 +144,8 @@ export async function POST(request) {
     if (ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL.toLowerCase()) {
       const isPassValid = await verifyPassword(password, ADMIN_PASSWORD);
       if (!configuredSlug || !adminSlug || adminSlug !== configuredSlug || !isPassValid) {
-        recordFailedAttempt(`ip:${clientIp}`);
-        recordFailedAttempt(`account:${normalizedEmail}`);
+        await recordAuthFailure(`ip:${clientIp}`);
+        await recordAuthFailure(`account:${normalizedEmail}`);
         return new Response(JSON.stringify({ message: 'Invalid credentials.' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
@@ -128,11 +153,12 @@ export async function POST(request) {
       }
 
       // Successful login clears rate limits
-      clearRateLimit(`ip:${clientIp}`);
-      clearRateLimit(`account:${normalizedEmail}`);
+      await clearAuthRateLimit(`ip:${clientIp}`);
+      await clearAuthRateLimit(`account:${normalizedEmail}`);
 
+      const superTokenVer = await getSuperAdminTokenVersion();
       const user = { id: 'admin-1', name: 'Super Administrator', email: ADMIN_EMAIL, role: 'superadmin' };
-      const sessionToken = await createSessionToken(user);
+      const sessionToken = await createSessionToken({ ...user, tokenVersion: superTokenVer });
       const cookieHeader = `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}; ${isProd ? 'Secure;' : ''}`;
 
       return new Response(JSON.stringify({ user }), {
@@ -153,8 +179,8 @@ export async function POST(request) {
     if (dbUser) {
       const isPassValid = await verifyPassword(password, dbUser.password);
       if (!isPassValid) {
-        recordFailedAttempt(`ip:${clientIp}`);
-        recordFailedAttempt(`account:${normalizedEmail}`);
+        await recordAuthFailure(`ip:${clientIp}`);
+        await recordAuthFailure(`account:${normalizedEmail}`);
         return new Response(JSON.stringify({ message: 'Invalid credentials.' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
@@ -178,8 +204,8 @@ export async function POST(request) {
       // If user has superadmin role in database, strictly require the secret admin slug
       if (dbUser.role === 'superadmin') {
         if (!configuredSlug || !adminSlug || adminSlug !== configuredSlug) {
-          recordFailedAttempt(`ip:${clientIp}`);
-          recordFailedAttempt(`account:${normalizedEmail}`);
+          await recordAuthFailure(`ip:${clientIp}`);
+          await recordAuthFailure(`account:${normalizedEmail}`);
           return new Response(JSON.stringify({ message: 'Invalid credentials.' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
@@ -190,8 +216,8 @@ export async function POST(request) {
       // If user is an onboarded admin and provided an adminSlug, verify it matches
       if (dbUser.role === 'admin' && adminSlug) {
         if (!configuredSlug || adminSlug !== configuredSlug) {
-          recordFailedAttempt(`ip:${clientIp}`);
-          recordFailedAttempt(`account:${normalizedEmail}`);
+          await recordAuthFailure(`ip:${clientIp}`);
+          await recordAuthFailure(`account:${normalizedEmail}`);
           return new Response(JSON.stringify({ message: 'Invalid credentials.' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
@@ -256,8 +282,8 @@ export async function POST(request) {
         }
 
         if (!isCodeValid) {
-          recordFailedAttempt(`ip:${clientIp}`);
-          recordFailedAttempt(`account:${normalizedEmail}`);
+          await recordAuthFailure(`ip:${clientIp}`);
+          await recordAuthFailure(`account:${normalizedEmail}`);
           return new Response(JSON.stringify({ message: 'Invalid two-factor code.' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
@@ -280,8 +306,8 @@ export async function POST(request) {
       }
 
       // Successful login clears rate limits
-      clearRateLimit(`ip:${clientIp}`);
-      clearRateLimit(`account:${normalizedEmail}`);
+      await clearAuthRateLimit(`ip:${clientIp}`);
+      await clearAuthRateLimit(`account:${normalizedEmail}`);
 
       const sessionUser = {
         id: dbUser.id,
@@ -294,12 +320,17 @@ export async function POST(request) {
         adminPermissions: dbUser.adminPermissions || null,
       };
 
+      const effectiveTokenVer =
+        sessionUser.role === 'superadmin'
+          ? await getSuperAdminTokenVersion()
+          : Number(dbUser.tokenVersion) || 1;
+
       const sessionToken = await createSessionToken({
         id: sessionUser.id,
         name: sessionUser.name,
         email: sessionUser.email,
         role: sessionUser.role,
-        tokenVersion: Number(dbUser.tokenVersion) || 1,
+        tokenVersion: effectiveTokenVer,
       });
 
       const cookieHeader = `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}; ${isProd ? 'Secure;' : ''}`;
@@ -315,9 +346,9 @@ export async function POST(request) {
     }
 
     // Target user not found: record failed attempt
-    recordFailedAttempt(`ip:${clientIp}`);
+    await recordAuthFailure(`ip:${clientIp}`);
     if (normalizedEmail) {
-      recordFailedAttempt(`account:${normalizedEmail}`);
+      await recordAuthFailure(`account:${normalizedEmail}`);
     }
 
     return new Response(JSON.stringify({ message: 'Invalid credentials.' }), {

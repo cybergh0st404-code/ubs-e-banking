@@ -34,59 +34,112 @@ const getCookie = (name) => {
 
 const AuthContext = createContext(null);
 
+// Strip large nested payloads before writing to browser cookie (4KB limit)
+const toCompactCookieUser = (u) => {
+  if (!u) return null;
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    status: u.status,
+    createdAt: u.createdAt,
+    totalBalance: u.totalBalance,
+    allowedPages: u.allowedPages,
+    lockedPages: u.lockedPages,
+    adminPermissions: u.adminPermissions,
+  };
+};
+
 export const AuthProvider = ({ children }) => {
+  // Deterministic initial state so SSR and initial client hydration always match 100%
   const [user, setUser] = useState(null);
+  const [accountCache, setAccountCache] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Attempt to load user from cookies on mount
-    const storedAuthStatus = getCookie('isAuthenticated');
-    const storedUserData = getCookie('user');
+    // Hydrate user and account cache from client storage immediately after mount
+    const storedAuthStatus = getCookie('isAuthenticated') || localStorage.getItem('ubs_is_authenticated');
+    const storedUserData = localStorage.getItem('ubs_auth_user') || getCookie('user');
 
-    if (storedAuthStatus === 'true' && storedUserData) {
+    if ((storedAuthStatus === 'true' || storedUserData) && storedUserData) {
       try {
-        setUser(JSON.parse(storedUserData));
+        const parsed = JSON.parse(storedUserData);
+        setUser(parsed);
         setIsAuthenticated(true);
       } catch (e) {
-        console.error("Failed to parse user data from cookies", e);
-        // Clear invalid data
-        setCookie('user', '', -1); // Remove cookie
-        setCookie('isAuthenticated', '', -1); // Remove cookie
+        console.error("Failed to parse user data from storage", e);
+        setCookie('user', '', -1);
+        setCookie('isAuthenticated', '', -1);
+        try {
+          localStorage.removeItem('ubs_auth_user');
+          localStorage.removeItem('ubs_is_authenticated');
+        } catch (_) {}
       }
     }
+
+    try {
+      const rawCache = sessionStorage.getItem('ubs_account_cache');
+      if (rawCache) {
+        setAccountCache(JSON.parse(rawCache));
+      }
+    } catch (_) {}
+
     setLoading(false);
   }, []);
 
   const login = (userData) => {
     setUser(userData);
     setIsAuthenticated(true);
-    setCookie('isAuthenticated', 'true', 7); // Set for 7 days
-    setCookie('user', JSON.stringify(userData), 7); // Set for 7 days
+    setCookie('isAuthenticated', 'true', 7);
+    try {
+      setCookie('user', JSON.stringify(toCompactCookieUser(userData)), 7);
+      localStorage.setItem('ubs_auth_user', JSON.stringify(userData));
+      localStorage.setItem('ubs_is_authenticated', 'true');
+    } catch (_) {}
   };
 
-  const updateUser = (updatedFields) => {
+  const updateUser = React.useCallback((updatedFields) => {
     setUser((prev) => {
-      const merged = { ...(prev || {}), ...updatedFields };
+      const base = prev || {};
+      const merged = { ...base, ...updatedFields };
       try {
-        setCookie('user', JSON.stringify(merged), 7);
-      } catch (_) { }
+        setCookie('user', JSON.stringify(toCompactCookieUser(merged)), 7);
+        localStorage.setItem('ubs_auth_user', JSON.stringify(merged));
+      } catch (_) {}
       return merged;
     });
-  };
+  }, []);
+
+  const updateAccountCache = React.useCallback((cacheFields) => {
+    setAccountCache((prev) => {
+      const merged = { ...(prev || {}), ...cacheFields };
+      try {
+        sessionStorage.setItem('ubs_account_cache', JSON.stringify(merged));
+      } catch (_) {}
+      return merged;
+    });
+  }, []);
 
   const logout = async () => {
     setUser(null);
+    setAccountCache(null);
     setIsAuthenticated(false);
-    setCookie('isAuthenticated', '', -1); // Expire cookie
-    setCookie('user', '', -1); // Expire cookie
+    setCookie('isAuthenticated', '', -1);
+    setCookie('user', '', -1);
+    try {
+      localStorage.removeItem('ubs_auth_user');
+      localStorage.removeItem('ubs_is_authenticated');
+      sessionStorage.removeItem('ubs_account_cache');
+    } catch (_) {}
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-    } catch (_) { }
+    } catch (_) {}
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, accountCache, isAuthenticated, loading, login, updateUser, updateAccountCache, logout }}>
       {children}
     </AuthContext.Provider>
   );

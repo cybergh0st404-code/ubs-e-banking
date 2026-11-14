@@ -93,6 +93,7 @@ const AdminUsersPage = () => {
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
   const [showPermAdminModal, setShowPermAdminModal] = useState(false);
+  const [showAdminStatusModal, setShowAdminStatusModal] = useState(false);
   const [targetAdmin, setTargetAdmin] = useState(null);
 
   const [newAdminForm, setNewAdminForm] = useState({
@@ -109,6 +110,13 @@ const AdminUsersPage = () => {
     email: '',
     password: '',
     status: 'active',
+  });
+
+  const [adminStatusForm, setAdminStatusForm] = useState({
+    id: '',
+    name: '',
+    status: 'active',
+    forceLogout: true,
   });
 
   const [permAdminForm, setPermAdminForm] = useState({ ...DEFAULT_ADMIN_PERMISSIONS });
@@ -289,6 +297,85 @@ const AdminUsersPage = () => {
       status: adm.status || 'active',
     });
     setShowEditAdminModal(true);
+  };
+
+  const openAdminStatusModal = (adm) => {
+    setTargetAdmin(adm);
+    setAdminStatusForm({
+      id: adm.id,
+      name: adm.name || '',
+      status: adm.status || 'active',
+      forceLogout: true,
+    });
+    setShowAdminStatusModal(true);
+  };
+
+  const handleUpdateAdminStatus = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!adminStatusForm.id) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/admin/admins', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: adminStatusForm.id,
+          status: adminStatusForm.status,
+          forceLogout: adminStatusForm.forceLogout,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || 'Failed to update admin status.');
+        setActionLoading(false);
+        return;
+      }
+      alert(`Admin "${adminStatusForm.name}" status updated to ${adminStatusForm.status.toUpperCase()} successfully.`);
+      setShowAdminStatusModal(false);
+      fetchAdmins();
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+      alert('Network error while updating admin status.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleQuickChangeAdminStatus = async (adm, newStatus) => {
+    const actionLabel = newStatus === 'suspended' ? 'SUSPEND' : newStatus === 'blocked' ? 'LOCK / BLOCK' : 'ACTIVATE';
+    const warningText =
+      newStatus === 'active'
+        ? `Are you sure you want to RE-ACTIVATE Admin "${adm.name}"? They will regain access to their dashboard and users.`
+        : `Are you sure you want to ${actionLabel} Admin "${adm.name}"? Their active session will be terminated immediately and they will be prevented from logging in.`;
+
+    if (!confirm(warningText)) return;
+
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/admin/admins', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: adm.id,
+          status: newStatus,
+          forceLogout: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || 'Failed to change admin status.');
+        return;
+      }
+      alert(`Admin "${adm.name}" is now ${newStatus.toUpperCase()}.`);
+      fetchAdmins();
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+      alert('Network error while updating admin status.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleUpdateAdmin = async (e) => {
@@ -693,6 +780,10 @@ const AdminUsersPage = () => {
     if (isSuperAdmin && selectedAdminFilter !== 'all') {
       const ownerId = u.createdByAdminId || 'admin-1';
       return ownerId === selectedAdminFilter;
+    }
+    // Strict tenant isolation safeguard: Regular admins can only view their own onboarded users
+    if (!isSuperAdmin && user?.id) {
+      return String(u.createdByAdminId || '') === String(user.id);
     }
     return true;
   });
@@ -1112,7 +1203,26 @@ const AdminUsersPage = () => {
                                     <div>
                                       <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-bold text-neutral-900 text-base">{adm.name}</span>
-                                        {getStatusBadge(adm.status)}
+                                        {adm.status === 'blocked' ? (
+                                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-accent-red border border-red-300 flex items-center space-x-1">
+                                            <Lock className="w-3 h-3" />
+                                            <span>LOCKED / BLOCKED</span>
+                                          </span>
+                                        ) : adm.status === 'suspended' ? (
+                                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center space-x-1">
+                                            <ShieldAlert className="w-3 h-3 text-amber-700" />
+                                            <span>SUSPENDED</span>
+                                          </span>
+                                        ) : adm.status === 'inactive' ? (
+                                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-600 border border-neutral-300">
+                                            INACTIVE
+                                          </span>
+                                        ) : (
+                                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                                            <span>ACTIVE</span>
+                                          </span>
+                                        )}
                                         <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-primary-blue border border-blue-200">
                                           {adm.userCount || 0} Users Onboarded
                                         </span>
@@ -1127,7 +1237,7 @@ const AdminUsersPage = () => {
                                   </div>
 
                                   {/* Admin Action Buttons */}
-                                  <div className="flex flex-wrap items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1149,11 +1259,55 @@ const AdminUsersPage = () => {
                                       <span>Permissions ({grantedCount}/{ALL_ADMIN_PERMISSIONS.length})</span>
                                     </button>
 
+                                    {/* Super Admin Quick Suspend & Lock Admin Controls */}
+                                    {adm.status === 'active' ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickChangeAdminStatus(adm, 'suspended')}
+                                          className="flex items-center space-x-1 px-2.5 py-1.5 rounded-bank text-xs font-semibold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 transition-colors shadow-sm"
+                                          title="Suspend this administrator (Logs out immediately)"
+                                        >
+                                          <ShieldAlert className="w-3.5 h-3.5 text-amber-700" />
+                                          <span>Suspend</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickChangeAdminStatus(adm, 'blocked')}
+                                          className="flex items-center space-x-1 px-2.5 py-1.5 rounded-bank text-xs font-semibold bg-red-50 text-accent-red hover:bg-red-100 border border-red-300 transition-colors shadow-sm"
+                                          title="Lock / Block this administrator"
+                                        >
+                                          <Lock className="w-3.5 h-3.5" />
+                                          <span>Lock</span>
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickChangeAdminStatus(adm, 'active')}
+                                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-bank text-xs font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 transition-colors shadow-sm"
+                                        title="Reactivate and unlock this administrator"
+                                      >
+                                        <Unlock className="w-3.5 h-3.5 text-emerald-700" />
+                                        <span>Activate / Unlock</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => openAdminStatusModal(adm)}
+                                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-bank text-xs font-semibold bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-300 transition-colors"
+                                      title="Manage Status & Lock Options"
+                                    >
+                                      <Shield className="w-3.5 h-3.5 text-neutral-600" />
+                                      <span>Status</span>
+                                    </button>
+
                                     <button
                                       type="button"
                                       onClick={() => openEditAdminModal(adm)}
                                       className="flex items-center space-x-1 px-2.5 py-1.5 rounded-bank text-xs font-semibold bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors"
-                                      title="Edit Admin Credentials & Status"
+                                      title="Edit Admin Credentials & Info"
                                     >
                                       <Edit className="w-3.5 h-3.5" />
                                       <span>Edit</span>
@@ -1751,10 +1905,137 @@ const AdminUsersPage = () => {
             </div>
           )}
 
+          {/* ========================================================= */}
+          {/* SUPER ADMIN MODAL 4: SUSPEND & LOCK ADMINISTRATOR         */}
+          {/* ========================================================= */}
+          {isSuperAdmin && showAdminStatusModal && targetAdmin && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
+              <div className="bg-white rounded-card shadow-bank-lg max-w-md w-full p-6 relative border-t-4 border-amber-500">
+                <div className="flex justify-between items-center pb-4 border-b border-neutral-200 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <ShieldAlert className="w-5 h-5 text-amber-600" />
+                    <div>
+                      <h3 className="text-lg font-bold text-primary-navy">Manage Administrator Access</h3>
+                      <p className="text-xs text-neutral-500">{adminStatusForm.name}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowAdminStatusModal(false)} className="text-neutral-400 hover:text-neutral-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleUpdateAdminStatus} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-2">Administrator Status</label>
+                    <div className="space-y-2">
+                      <label className={`flex items-start space-x-3 p-3 rounded-bank border cursor-pointer transition-all ${
+                        adminStatusForm.status === 'active' ? 'bg-green-50 border-green-400 ring-1 ring-green-400' : 'bg-neutral-50 border-neutral-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="adminStatus"
+                          value="active"
+                          checked={adminStatusForm.status === 'active'}
+                          onChange={() => setAdminStatusForm({ ...adminStatusForm, status: 'active' })}
+                          className="mt-0.5 text-green-600 focus:ring-green-500"
+                        />
+                        <div>
+                          <div className="text-sm font-bold text-neutral-900 flex items-center space-x-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                            <span>Active</span>
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-0.5">Admin can sign in, onboard clients, and manage their assigned users.</p>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-start space-x-3 p-3 rounded-bank border cursor-pointer transition-all ${
+                        adminStatusForm.status === 'suspended' ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-400' : 'bg-neutral-50 border-neutral-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="adminStatus"
+                          value="suspended"
+                          checked={adminStatusForm.status === 'suspended'}
+                          onChange={() => setAdminStatusForm({ ...adminStatusForm, status: 'suspended' })}
+                          className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                        />
+                        <div>
+                          <div className="text-sm font-bold text-amber-900 flex items-center space-x-1.5">
+                            <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Suspended</span>
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-0.5">Temporarily halts all administrative privileges and prevents sign-in.</p>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-start space-x-3 p-3 rounded-bank border cursor-pointer transition-all ${
+                        adminStatusForm.status === 'blocked' ? 'bg-red-50 border-red-400 ring-1 ring-red-400' : 'bg-neutral-50 border-neutral-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="adminStatus"
+                          value="blocked"
+                          checked={adminStatusForm.status === 'blocked'}
+                          onChange={() => setAdminStatusForm({ ...adminStatusForm, status: 'blocked' })}
+                          className="mt-0.5 text-accent-red focus:ring-red-500"
+                        />
+                        <div>
+                          <div className="text-sm font-bold text-accent-red flex items-center space-x-1.5">
+                            <Lock className="w-3.5 h-3.5 text-accent-red" />
+                            <span>Blocked / Locked</span>
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-0.5">Strict security lockout. Terminates active sessions immediately.</p>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-start space-x-3 p-3 rounded-bank border cursor-pointer transition-all ${
+                        adminStatusForm.status === 'inactive' ? 'bg-neutral-100 border-neutral-400' : 'bg-neutral-50 border-neutral-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="adminStatus"
+                          value="inactive"
+                          checked={adminStatusForm.status === 'inactive'}
+                          onChange={() => setAdminStatusForm({ ...adminStatusForm, status: 'inactive' })}
+                          className="mt-0.5 text-neutral-600 focus:ring-neutral-500"
+                        />
+                        <div>
+                          <div className="text-sm font-bold text-neutral-800">Inactive</div>
+                          <p className="text-xs text-neutral-500 mt-0.5">Admin account is deactivated.</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="bg-neutral-50 p-3 rounded-bank border border-neutral-200">
+                    <label className="flex items-center space-x-2 text-xs font-semibold text-neutral-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={adminStatusForm.forceLogout}
+                        onChange={(e) => setAdminStatusForm({ ...adminStatusForm, forceLogout: e.target.checked })}
+                        className="rounded text-primary-blue focus:ring-primary-blue h-4 w-4"
+                      />
+                      <span>Force log out all active sessions immediately</span>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4 border-t border-neutral-200">
+                    <Button variant="secondary" type="button" onClick={() => setShowAdminStatusModal(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={actionLoading}>
+                      {actionLoading ? 'Updating...' : 'Save Status'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* ADD USER MODAL */}
           {showAddModal && canDo('canCreateUsers') && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
-              <div className="bg-white rounded-card shadow-bank-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 relative">
+              <div className="bg-white rounded-card shadow-bank-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
                 <div className="flex justify-between items-center pb-4 border-b border-neutral-200 mb-4">
                   <div className="flex items-center space-x-2">
                     <UserPlus className="w-5 h-5 text-primary-blue" />
@@ -1911,14 +2192,14 @@ const AdminUsersPage = () => {
                           </button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-neutral-50 p-3 rounded-bank border border-neutral-200 max-h-60 overflow-y-auto">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-neutral-50 p-3.5 rounded-bank border border-neutral-200 max-h-80 overflow-y-auto">
                         {ALL_AVAILABLE_PAGES.map((page) => {
                           const isVisible = newUser.allowedPages.includes(page.id);
                           const isLocked = newUser.lockedPages?.includes(page.id);
                           return (
                             <div
                               key={page.id}
-                              className={`flex items-center justify-between p-2 rounded border transition-all ${
+                              className={`flex items-center justify-between p-2.5 rounded-bank border transition-all ${
                                 !isVisible 
                                   ? 'bg-neutral-100/70 border-neutral-200 opacity-60' 
                                   : isLocked
@@ -1926,7 +2207,7 @@ const AdminUsersPage = () => {
                                     : 'bg-white border-neutral-200 hover:border-blue-300'
                               }`}
                             >
-                              <label className="flex items-center space-x-2 cursor-pointer flex-1 min-w-0 mr-1.5">
+                              <label className="flex items-center space-x-2.5 cursor-pointer flex-1 min-w-0 mr-2 py-0.5">
                                 <input
                                   type="checkbox"
                                   checked={isVisible}
@@ -1937,9 +2218,9 @@ const AdminUsersPage = () => {
                                       setNewUser({ ...newUser, allowedPages: newUser.allowedPages.filter((p) => p !== page.id) });
                                     }
                                   }}
-                                  className="rounded text-primary-blue focus:ring-primary-blue h-3.5 w-3.5"
+                                  className="rounded text-primary-blue focus:ring-primary-blue h-4 w-4 flex-shrink-0"
                                 />
-                                <span className="text-xs font-medium text-neutral-800 truncate">{page.label}</span>
+                                <span className="text-xs font-semibold text-neutral-800 leading-snug break-words">{page.label}</span>
                               </label>
                               <button
                                 type="button"
@@ -1949,20 +2230,20 @@ const AdminUsersPage = () => {
                                   setNewUser({ ...newUser, lockedPages: updated });
                                 }}
                                 title={isLocked ? "Unlock service" : "Lock service (user cannot access)"}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                                className={`px-2 py-1 rounded text-[10px] font-bold flex items-center space-x-1 flex-shrink-0 transition-all ${
                                   isLocked
                                     ? 'bg-red-500 text-white shadow-sm hover:bg-red-600'
-                                    : 'bg-neutral-200/80 text-neutral-600 hover:bg-neutral-300'
+                                    : 'bg-neutral-200/90 text-neutral-700 hover:bg-neutral-300'
                                 }`}
                               >
                                 {isLocked ? (
                                   <>
-                                    <Lock className="w-3 h-3" />
+                                    <Lock className="w-3 h-3 flex-shrink-0" />
                                     <span>LOCKED</span>
                                   </>
                                 ) : (
                                   <>
-                                    <Unlock className="w-3 h-3 text-neutral-500" />
+                                    <Unlock className="w-3 h-3 text-neutral-500 flex-shrink-0" />
                                     <span>OPEN</span>
                                   </>
                                 )}
@@ -1990,7 +2271,7 @@ const AdminUsersPage = () => {
           {/* EDIT USER MODAL */}
           {showEditModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
-              <div className="bg-white rounded-card shadow-bank-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 relative">
+              <div className="bg-white rounded-card shadow-bank-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
                 <div className="flex justify-between items-center pb-4 border-b border-neutral-200 mb-4">
                   <div className="flex items-center space-x-2">
                     <Edit className="w-5 h-5 text-primary-blue" />
@@ -2156,14 +2437,14 @@ const AdminUsersPage = () => {
                           </button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-neutral-50 p-3 rounded-bank border border-neutral-200 max-h-60 overflow-y-auto">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-neutral-50 p-3.5 rounded-bank border border-neutral-200 max-h-80 overflow-y-auto">
                         {ALL_AVAILABLE_PAGES.map((page) => {
                           const isVisible = editUser.allowedPages?.includes(page.id);
                           const isLocked = editUser.lockedPages?.includes(page.id);
                           return (
                             <div
                               key={page.id}
-                              className={`flex items-center justify-between p-2 rounded border transition-all ${
+                              className={`flex items-center justify-between p-2.5 rounded-bank border transition-all ${
                                 !isVisible 
                                   ? 'bg-neutral-100/70 border-neutral-200 opacity-60' 
                                   : isLocked
@@ -2171,7 +2452,7 @@ const AdminUsersPage = () => {
                                     : 'bg-white border-neutral-200 hover:border-blue-300'
                               }`}
                             >
-                              <label className="flex items-center space-x-2 cursor-pointer flex-1 min-w-0 mr-1.5">
+                              <label className="flex items-center space-x-2.5 cursor-pointer flex-1 min-w-0 mr-2 py-0.5">
                                 <input
                                   type="checkbox"
                                   checked={isVisible}
@@ -2183,9 +2464,9 @@ const AdminUsersPage = () => {
                                       setEditUser({ ...editUser, allowedPages: current.filter((p) => p !== page.id) });
                                     }
                                   }}
-                                  className="rounded text-primary-blue focus:ring-primary-blue h-3.5 w-3.5"
+                                  className="rounded text-primary-blue focus:ring-primary-blue h-4 w-4 flex-shrink-0"
                                 />
-                                <span className="text-xs font-medium text-neutral-800 truncate">{page.label}</span>
+                                <span className="text-xs font-semibold text-neutral-800 leading-snug break-words">{page.label}</span>
                               </label>
                               <button
                                 type="button"
@@ -2195,20 +2476,20 @@ const AdminUsersPage = () => {
                                   setEditUser({ ...editUser, lockedPages: updated });
                                 }}
                                 title={isLocked ? "Unlock service" : "Lock service (user cannot access)"}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                                className={`px-2 py-1 rounded text-[10px] font-bold flex items-center space-x-1 flex-shrink-0 transition-all ${
                                   isLocked
                                     ? 'bg-red-500 text-white shadow-sm hover:bg-red-600'
-                                    : 'bg-neutral-200/80 text-neutral-600 hover:bg-neutral-300'
+                                    : 'bg-neutral-200/90 text-neutral-700 hover:bg-neutral-300'
                                 }`}
                               >
                                 {isLocked ? (
                                   <>
-                                    <Lock className="w-3 h-3" />
+                                    <Lock className="w-3 h-3 flex-shrink-0" />
                                     <span>LOCKED</span>
                                   </>
                                 ) : (
                                   <>
-                                    <Unlock className="w-3 h-3 text-neutral-500" />
+                                    <Unlock className="w-3 h-3 text-neutral-500 flex-shrink-0" />
                                     <span>OPEN</span>
                                   </>
                                 )}

@@ -4,6 +4,12 @@ import { requireAdmin, hashPassword, hashTwoFactorCode } from '../../../../lib/s
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+function sanitizeUserForClient(user) {
+  if (!user || typeof user !== 'object') return user;
+  const { password, twoFactorCode, ...safeUser } = user;
+  return safeUser;
+}
+
 export async function GET(request) {
   try {
     const auth = await requireAdmin(request);
@@ -45,7 +51,7 @@ export async function GET(request) {
         (user.createdByAdminId && allAdminsMap[user.createdByAdminId]) ||
         'Super Administrator';
 
-      return {
+      return sanitizeUserForClient({
         ...user,
         createdByAdminId: user.createdByAdminId || 'admin-1',
         createdByAdminName: resolvedAdminName,
@@ -53,7 +59,7 @@ export async function GET(request) {
         totalBalance,
         primaryAccount: userAccounts[0] || null,
         initialDepositDate,
-      };
+      });
     });
 
     return new Response(
@@ -198,7 +204,7 @@ export async function POST(request) {
 
     await saveBankData(data);
 
-    return new Response(JSON.stringify({ user: newUser, account: newAccount }), {
+    return new Response(JSON.stringify({ user: sanitizeUserForClient(newUser), account: newAccount }), {
       status: 201,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -428,7 +434,7 @@ export async function PUT(request) {
 
     await saveBankData(data);
 
-    return new Response(JSON.stringify({ user: updatedUser }), {
+    return new Response(JSON.stringify({ user: sanitizeUserForClient(updatedUser) }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

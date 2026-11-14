@@ -24,11 +24,11 @@ import { useAuth } from '../utils/AuthContext';
 
 const MessagesPage = () => {
   const router = useRouter();
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, accountCache, logout, updateUser, updateAccountCache, loading: authLoading } = useAuth();
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedMessage, setSelectedMessage] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const [notice, setNotice] = useState(accountCache?.notice || user?.notice || null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -37,12 +37,22 @@ const MessagesPage = () => {
   }, [user, router, authLoading]);
 
   useEffect(() => {
-    if (!user) return;
+    if (accountCache?.notice && !notice) {
+      setNotice(accountCache.notice);
+    }
+  }, [accountCache?.notice]);
+
+  useEffect(() => {
+    if (!user?.id && !user?.email) return;
+    let isMounted = true;
     const fetchAccountData = async () => {
       try {
-        const res = await fetch('/api/user/account-data');
+        const query = user.id ? `?userId=${user.id}&email=${encodeURIComponent(user.email || '')}` : '';
+        const res = await fetch(`/api/user/account-data${query}`);
+        if (!isMounted) return;
         if (res.ok) {
           const data = await res.json();
+          if (!isMounted) return;
           if (data.notice) {
             setNotice(data.notice);
             // If URL has ?open=notice and notice is sent as message or enabled, open it automatically
@@ -69,13 +79,36 @@ const MessagesPage = () => {
               });
             }
           }
+
+          if (updateAccountCache && data) {
+            updateAccountCache({
+              totalBalance: data.totalBalance !== undefined ? Number(data.totalBalance) || 0 : undefined,
+              allowedPages: data.allowedPages || undefined,
+              lockedPages: data.lockedPages || undefined,
+              notice: data.notice || null,
+              accountStatus: (data.user?.status || 'active').toLowerCase(),
+              transactions: data.transactions || [],
+            });
+          }
+
+          if (updateUser && data) {
+            updateUser({
+              totalBalance: data.totalBalance !== undefined ? Number(data.totalBalance) || 0 : user.totalBalance,
+              allowedPages: data.allowedPages || user.allowedPages,
+              lockedPages: data.lockedPages || user.lockedPages,
+              notice: data.notice || user.notice,
+            });
+          }
         }
       } catch (err) {
         console.error('Error fetching account data:', err);
       }
     };
     fetchAccountData();
-  }, [user]);
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, user?.email]);
 
   const baseMessages = [
     {

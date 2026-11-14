@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, normalizeAdminPermissions } from '../../../../lib/db.js';
+import { getBankData, saveBankData, normalizeAdminPermissions, resolveAdminContext } from '../../../../lib/db.js';
 import { requireSuperAdmin, hashPassword } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +15,13 @@ export async function GET(request) {
     }
 
     const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const allUsers = data.users || [];
     const allAccounts = data.accounts || [];
 
@@ -98,6 +105,13 @@ export async function POST(request) {
     }
 
     const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const existing = (data.users || []).find((u) => u.email?.toLowerCase() === normalizedEmail);
     if (existing) {
       return new Response(JSON.stringify({ message: 'An account with this email already exists.' }), {
@@ -181,6 +195,13 @@ export async function PUT(request) {
     }
 
     const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const adminIndex = (data.users || []).findIndex((u) => u.id === id && u.role === 'admin');
     if (adminIndex === -1) {
       return new Response(JSON.stringify({ message: 'Admin not found.' }), {
@@ -292,6 +313,13 @@ export async function DELETE(request) {
     }
 
     const data = await getBankData();
+    const ctx = resolveAdminContext(auth, data);
+    if (!ctx.valid) {
+      return new Response(JSON.stringify({ message: ctx.error || 'Unauthorized' }), {
+        status: ctx.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const targetAdmin = (data.users || []).find((u) => u.id === id && u.role === 'admin');
     if (!targetAdmin) {
       return new Response(JSON.stringify({ message: 'Admin not found.' }), {

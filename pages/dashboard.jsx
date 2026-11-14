@@ -113,26 +113,61 @@ const UkFlag = () => (
 
 const Dashboard = () => {
   const router = useRouter();
-  const { user, logout, updateUser, loading: authLoading } = useAuth();
+  const { user, accountCache, logout, updateUser, updateAccountCache, loading: authLoading } = useAuth();
 
-  const [balance, setBalance] = useState(0);
-  const [accountNumber, setAccountNumber] = useState('CH-XXXX-XXXX-8504');
-  const [fullAccountNumber, setFullAccountNumber] = useState('CH-78456321');
+  // Initialize from AuthContext (null on SSR + first hydration pass -> zero hydration mismatch;
+  // populated in memory on client-side navigations like /messages -> /dashboard -> zero flicker)
+  const [balance, setBalance] = useState(
+    typeof accountCache?.totalBalance === 'number'
+      ? accountCache.totalBalance
+      : typeof user?.totalBalance === 'number'
+      ? user.totalBalance
+      : 0
+  );
+  const [accountNumber, setAccountNumber] = useState(
+    accountCache?.accountNumber || 'CH-XXXX-XXXX-8504'
+  );
+  const [fullAccountNumber, setFullAccountNumber] = useState(
+    accountCache?.fullAccountNumber || 'CH-78456321'
+  );
   const [accountType, setAccountType] = useState('Premium / Multi-Currency');
-  const [openingDate, setOpeningDate] = useState('Nov 03, 2025');
-  const [recentTransactions, setRecentTransactions] = useState([]);
-  const [notice, setNotice] = useState(null);
-  const [showNoticePopup, setShowNoticePopup] = useState(false);
+  const [openingDate, setOpeningDate] = useState(
+    accountCache?.openingDate || 'Nov 03, 2025'
+  );
+  const [recentTransactions, setRecentTransactions] = useState(
+    accountCache?.transactions || []
+  );
+  const [notice, setNotice] = useState(
+    accountCache?.notice || user?.notice || null
+  );
+  const [showNoticePopup, setShowNoticePopup] = useState(() => {
+    const n = accountCache?.notice || user?.notice;
+    return Boolean(n && n.enabled && n.showPopup !== false);
+  });
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
   const [currentTimeUtc, setCurrentTimeUtc] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Admin access control states
-  const [allowedPages, setAllowedPages] = useState(null);
-  const [lockedPages, setLockedPages] = useState([]);
+  const [allowedPages, setAllowedPages] = useState(
+    Array.isArray(accountCache?.allowedPages)
+      ? accountCache.allowedPages
+      : Array.isArray(user?.allowedPages)
+      ? user.allowedPages
+      : null
+  );
+  const [lockedPages, setLockedPages] = useState(
+    Array.isArray(accountCache?.lockedPages)
+      ? accountCache.lockedPages
+      : Array.isArray(user?.lockedPages)
+      ? user.lockedPages
+      : []
+  );
   const [lockedModalItem, setLockedModalItem] = useState(null);
   const [accountRestriction, setAccountRestriction] = useState(null);
-  const [accountStatus, setAccountStatus] = useState(user?.status || 'active');
+  const [accountStatus, setAccountStatus] = useState(
+    accountCache?.accountStatus || user?.status || 'active'
+  );
 
   // Interactive Modals
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -148,6 +183,25 @@ const Dashboard = () => {
       router.push('/login');
     }
   }, [user, router, authLoading]);
+
+  // Immediately hydrate local states when AuthContext finishes loading user & accountCache
+  useEffect(() => {
+    if (accountCache) {
+      if (typeof accountCache.totalBalance === 'number') setBalance(accountCache.totalBalance);
+      if (accountCache.accountNumber) setAccountNumber(accountCache.accountNumber);
+      if (accountCache.fullAccountNumber) setFullAccountNumber(accountCache.fullAccountNumber);
+      if (accountCache.openingDate) setOpeningDate(accountCache.openingDate);
+      if (Array.isArray(accountCache.transactions)) setRecentTransactions(accountCache.transactions);
+      if (Array.isArray(accountCache.allowedPages)) setAllowedPages(accountCache.allowedPages);
+      if (Array.isArray(accountCache.lockedPages)) setLockedPages(accountCache.lockedPages);
+      if (accountCache.accountStatus) setAccountStatus(accountCache.accountStatus);
+    } else if (user) {
+      if (typeof user.totalBalance === 'number') setBalance(user.totalBalance);
+      if (Array.isArray(user.allowedPages)) setAllowedPages(user.allowedPages);
+      if (Array.isArray(user.lockedPages)) setLockedPages(user.lockedPages);
+      if (user.status) setAccountStatus(user.status);
+    }
+  }, [accountCache, user?.id]);
 
   // Live ticking UTC clock matching: Mon, Nov 03, 2025 | 12:18 (UTC)
   useEffect(() => {
@@ -170,9 +224,10 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch live account data
+  // Fetch live account data (depend on user.id/email, NOT user object reference, to prevent infinite fetch loops)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id && !user?.email) return;
+    let isMounted = true;
 
     if (user.createdAt) {
       try {
@@ -197,28 +252,38 @@ const Dashboard = () => {
       try {
         const query = user.id ? `?userId=${user.id}&email=${encodeURIComponent(user.email || '')}` : '';
         const res = await fetch(`/api/user/account-data${query}`);
+        if (!isMounted) return;
         if (res.ok) {
           const data = await res.json();
+          if (!isMounted) return;
+          let effectiveBalance = balance;
           if (data.totalBalance !== undefined) {
-            setBalance(Number(data.totalBalance) || 0);
+            effectiveBalance = Number(data.totalBalance) || 0;
+            setBalance(effectiveBalance);
           }
+          let formattedOpening = openingDate;
           const userCreated = data.user?.createdAt || user?.createdAt;
           if (userCreated) {
             try {
               const d = new Date(userCreated);
               if (!isNaN(d.getTime())) {
                 const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                setOpeningDate(`${m[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`);
+                formattedOpening = `${m[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`;
+                setOpeningDate(formattedOpening);
               }
             } catch (_) {}
           }
+          let computedAccNum = accountNumber;
+          let computedFullAccNum = fullAccountNumber;
           if (data.primaryAccount) {
             const rawAcc = data.primaryAccount.accountNumber || '';
             const fullAcc = data.primaryAccount.fullAccountNumber || '';
             const digits = (rawAcc + fullAcc).replace(/\D/g, '');
             const last4 = digits.length >= 4 ? digits.slice(-4) : (rawAcc.slice(-4) || '8504');
-            setAccountNumber(`CH-XXXX-XXXX-${last4}`);
-            setFullAccountNumber(fullAcc ? (fullAcc.startsWith('CH-') ? fullAcc : `CH-${fullAcc}`) : (rawAcc && rawAcc.startsWith('CH-') ? rawAcc : `CH-7845${last4}`));
+            computedAccNum = `CH-XXXX-XXXX-${last4}`;
+            computedFullAccNum = fullAcc ? (fullAcc.startsWith('CH-') ? fullAcc : `CH-${fullAcc}`) : (rawAcc && rawAcc.startsWith('CH-') ? rawAcc : `CH-7845${last4}`);
+            setAccountNumber(computedAccNum);
+            setFullAccountNumber(computedFullAccNum);
             if (data.primaryAccount.type) {
               setAccountType('Premium / Multi-Currency');
             }
@@ -234,8 +299,24 @@ const Dashboard = () => {
           }
           const fetchedStatus = (data.user?.status || data.primaryAccount?.status || user?.status || 'active').toLowerCase();
           setAccountStatus(fetchedStatus);
+
+          if (updateAccountCache) {
+            updateAccountCache({
+              totalBalance: effectiveBalance,
+              accountNumber: computedAccNum,
+              fullAccountNumber: computedFullAccNum,
+              openingDate: formattedOpening,
+              transactions: data.transactions || [],
+              allowedPages: data.allowedPages || [],
+              lockedPages: data.lockedPages || [],
+              notice: data.notice || null,
+              accountStatus: fetchedStatus,
+            });
+          }
+
           if (updateUser) {
             updateUser({
+              totalBalance: effectiveBalance,
               allowedPages: data.allowedPages || [],
               lockedPages: data.lockedPages || [],
               status: fetchedStatus,
@@ -273,10 +354,13 @@ const Dashboard = () => {
       }
     };
     fetchAccountData();
-  }, [user]);
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, user?.email]);
 
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Client';
-  const fullName = user?.name || 'Mandy';
+  const fullName = user?.name || 'Valued Client';
 
   const formatCurrency = (amount, currency = 'USD') => {
     if (!isBalanceVisible) return '••••••';
@@ -307,17 +391,26 @@ const Dashboard = () => {
 
   // Check if an item is permitted by admin (visibility)
   const isPageAllowed = (id) => {
-    if (allowedPages === null || allowedPages === undefined) {
+    const effectiveAllowed =
+      allowedPages !== null && allowedPages !== undefined
+        ? allowedPages
+        : (user && Array.isArray(user.allowedPages) ? user.allowedPages : null);
+
+    if (effectiveAllowed === null || effectiveAllowed === undefined) {
       return DEFAULT_CORE_MENU_IDS.includes(id);
     }
     if (id === 'dashboard') return true;
-    return allowedPages.includes(id);
+    return effectiveAllowed.includes(id);
   };
 
   // Check if an item is locked by admin (user cannot access)
   const isPageLocked = (id) => {
-    if (!lockedPages || !Array.isArray(lockedPages)) return false;
-    return lockedPages.includes(id);
+    const effectiveLocked =
+      lockedPages && Array.isArray(lockedPages) && lockedPages.length > 0
+        ? lockedPages
+        : (user && Array.isArray(user.lockedPages) ? user.lockedPages : []);
+
+    return effectiveLocked.includes(id);
   };
 
   // Check if an item is restricted (either locked OR not allowed)

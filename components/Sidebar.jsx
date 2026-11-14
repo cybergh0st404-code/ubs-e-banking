@@ -28,11 +28,27 @@ import { DEFAULT_CORE_MENU_IDS, normalizeMenuIds, hasAdminPermission } from '../
 
 const Sidebar = ({ isAdmin = false }) => {
   const router = useRouter();
-  const { user, logout, updateUser } = useAuth();
+  const { user, accountCache, logout, updateUser, updateAccountCache } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [allowedPages, setAllowedPages] = useState(user?.allowedPages || null);
-  const [lockedPages, setLockedPages] = useState(user?.lockedPages || []);
+  const [allowedPages, setAllowedPages] = useState(
+    user?.allowedPages || accountCache?.allowedPages || null
+  );
+  const [lockedPages, setLockedPages] = useState(
+    user?.lockedPages || accountCache?.lockedPages || []
+  );
   const [lockedModalItem, setLockedModalItem] = useState(null);
+
+  // Synchronize when user or accountCache hydrates/updates
+  useEffect(() => {
+    const nextAllowed = accountCache?.allowedPages || user?.allowedPages;
+    if (Array.isArray(nextAllowed)) {
+      setAllowedPages(nextAllowed);
+    }
+    const nextLocked = accountCache?.lockedPages || user?.lockedPages;
+    if (Array.isArray(nextLocked)) {
+      setLockedPages(nextLocked);
+    }
+  }, [user?.allowedPages, user?.lockedPages, accountCache?.allowedPages, accountCache?.lockedPages]);
 
   // Listen to mobile menu toggle event dispatched by Navbar
   useEffect(() => {
@@ -43,25 +59,40 @@ const Sidebar = ({ isAdmin = false }) => {
     }
   }, []);
 
-  // Sync allowed and locked pages from account-data API
+  // Sync allowed and locked pages from account-data API (depend on user.id, NOT user object reference)
   useEffect(() => {
-    if (isAdmin || !user) return;
+    if (isAdmin || !user?.id) return;
+    let isMounted = true;
     const fetchPerms = async () => {
       try {
         const query = user.id ? `?userId=${user.id}&email=${encodeURIComponent(user.email || '')}` : '';
         const res = await fetch(`/api/user/account-data${query}`);
+        if (!isMounted) return;
         if (res.ok) {
           const data = await res.json();
+          if (!isMounted) return;
           if (data.allowedPages && Array.isArray(data.allowedPages)) {
             setAllowedPages(data.allowedPages);
           }
           if (data.lockedPages && Array.isArray(data.lockedPages)) {
             setLockedPages(data.lockedPages);
           }
-          if (updateUser && (data.allowedPages || data.lockedPages)) {
+          if (updateUser) {
             updateUser({
+              totalBalance: data.totalBalance !== undefined ? Number(data.totalBalance) || 0 : user.totalBalance,
               allowedPages: data.allowedPages || [],
               lockedPages: data.lockedPages || [],
+              status: data.user?.status || user.status,
+            });
+          }
+          if (updateAccountCache) {
+            updateAccountCache({
+              totalBalance: data.totalBalance !== undefined ? Number(data.totalBalance) || 0 : undefined,
+              allowedPages: data.allowedPages || [],
+              lockedPages: data.lockedPages || [],
+              notice: data.notice || null,
+              transactions: data.transactions || [],
+              accountStatus: (data.user?.status || 'active').toLowerCase(),
             });
           }
         } else if (res.status === 401) {
@@ -73,7 +104,10 @@ const Sidebar = ({ isAdmin = false }) => {
       }
     };
     fetchPerms();
-  }, [isAdmin, user]);
+    return () => {
+      isMounted = false;
+    };
+  }, [isAdmin, user?.id, user?.email]);
 
   const allUserMenuItems = [
     { id: 'dashboard', path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -106,17 +140,25 @@ const Sidebar = ({ isAdmin = false }) => {
     (item) => !item.perm || hasAdminPermission(user, item.perm)
   );
 
+  const effectiveAllowed = (allowedPages && Array.isArray(allowedPages))
+    ? allowedPages
+    : (user && Array.isArray(user.allowedPages) ? user.allowedPages : null);
+
+  const effectiveLocked = (lockedPages && Array.isArray(lockedPages))
+    ? lockedPages
+    : (user && Array.isArray(user.lockedPages) ? user.lockedPages : []);
+
   // Filter items by allowed pages if user is not admin
-  const userMenuItems = allowedPages && Array.isArray(allowedPages)
-    ? allUserMenuItems.filter((item) => item.id === 'dashboard' || allowedPages.includes(item.id))
+  const userMenuItems = effectiveAllowed && Array.isArray(effectiveAllowed)
+    ? allUserMenuItems.filter((item) => item.id === 'dashboard' || effectiveAllowed.includes(item.id))
     : allUserMenuItems.filter((item) => DEFAULT_CORE_MENU_IDS.includes(item.id));
 
   const menuItems = isAdmin ? adminMenuItems : userMenuItems;
 
   // Map current path to page id to check if user navigated directly to a locked or disallowed page
   const currentItem = allUserMenuItems.find((i) => i.path === router.pathname);
-  const isCurrentPageLocked = !isAdmin && currentItem && lockedPages.includes(currentItem.id);
-  const isCurrentPageDisallowed = !isAdmin && currentItem && allowedPages && Array.isArray(allowedPages) && currentItem.id !== 'dashboard' && !allowedPages.includes(currentItem.id);
+  const isCurrentPageLocked = !isAdmin && currentItem && effectiveLocked.includes(currentItem.id);
+  const isCurrentPageDisallowed = !isAdmin && currentItem && effectiveAllowed && Array.isArray(effectiveAllowed) && currentItem.id !== 'dashboard' && !effectiveAllowed.includes(currentItem.id);
 
   const handleMenuClick = (item) => {
     if (!isAdmin && lockedPages.includes(item.id)) {
