@@ -270,9 +270,10 @@ const Sidebar = ({ isAdmin = false }) => {
           {/* Drawer Footer Actions */}
           <div className="p-3 border-t border-neutral-200 bg-neutral-50">
             <button
-              onClick={() => {
-                if (logout) logout();
-                router.push('/login');
+              onClick={async () => {
+                const isRegAdmin = user?.role === 'admin';
+                if (logout) await logout();
+                router.replace(isRegAdmin ? '/admin/login' : '/login');
               }}
               className="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-semibold text-accent-red hover:bg-red-50 rounded-bank transition-colors"
             >

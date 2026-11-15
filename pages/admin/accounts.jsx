@@ -62,7 +62,7 @@ const AdminAccountsPage = () => {
 
   useEffect(() => {
     if (!authLoading && (!user || !isAnyAdmin)) {
-      router.push('/404');
+      router.replace('/login');
     }
   }, [user, router, authLoading, isAnyAdmin]);
 

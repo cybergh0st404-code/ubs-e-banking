@@ -174,10 +174,10 @@ const AdminUsersPage = () => {
     return hasAdminPermission(effectiveUser, permId);
   };
 
-  // Redirect non-admins to 404
+  // Redirect signed-out admins to login (server-side middleware & getServerSideProps handle 404 for unauthorized visitors)
   useEffect(() => {
     if (!authLoading && (!user || !isAnyAdmin)) {
-      router.push('/404');
+      router.replace('/login');
     }
   }, [user, router, authLoading, isAnyAdmin]);
 

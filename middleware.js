@@ -11,10 +11,22 @@ export async function middleware(request) {
   }
 
   // Cryptographically verify session token (tamper-proof)
+  // Also require the client auth state cookie ('isAuthenticated=true') so a stale HttpOnly session_token
+  // after client-side logout never traps the browser in a /login -> /super-admin -> /404 redirect loop.
   const sessionToken = request.cookies.get('session_token')?.value;
-  const session = sessionToken ? await verifySessionToken(sessionToken) : null;
+  const clientAuthFlag = request.cookies.get('isAuthenticated')?.value === 'true';
+  const rawSession = sessionToken && clientAuthFlag ? await verifySessionToken(sessionToken) : null;
+  const hasStaleSessionToken = Boolean(sessionToken && !rawSession);
+  const session = rawSession;
   const isAuthenticated = Boolean(session);
   const userRole = session?.role || null;
+
+  const withClearedStaleCookie = (response) => {
+    if (hasStaleSessionToken) {
+      response.cookies.delete('session_token');
+    }
+    return response;
+  };
 
   // The secret super-admin slug (strictly from environment, no hardcoded fallbacks)
   const secretSlug = getAdminSecretSlug();
@@ -129,7 +141,7 @@ export async function middleware(request) {
     }
   }
 
-  return NextResponse.next();
+  return withClearedStaleCookie(NextResponse.next());
 }
 
 export const config = {

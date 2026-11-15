@@ -25,9 +25,9 @@ export async function POST(request) {
   }
 
   const isProd = process.env.NODE_ENV === 'production';
-  const clearSessionCookie = `session_token=; Path=/; HttpOnly; Max-Age=0; ${isProd ? 'Secure;' : ''}`;
-  const clearAuthCookie = `isAuthenticated=; Path=/; Max-Age=0; ${isProd ? 'Secure;' : ''}`;
-  const clearUserCookie = `user=; Path=/; Max-Age=0; ${isProd ? 'Secure;' : ''}`;
+  const clearSessionCookie = `session_token=; Path=/; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; ${isProd ? 'Secure;' : ''}`;
+  const clearAuthCookie = `isAuthenticated=; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; ${isProd ? 'Secure;' : ''}`;
+  const clearUserCookie = `user=; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; ${isProd ? 'Secure;' : ''}`;
 
   const headers = new Headers({
     'Content-Type': 'application/json',

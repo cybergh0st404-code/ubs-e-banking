@@ -7,12 +7,12 @@ const Navbar = ({ user, onLogout }) => {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const router = useRouter();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     const isRegAdmin = user?.role === 'admin';
     if (onLogout) {
-      onLogout();
+      await onLogout();
     }
-    router.push(isRegAdmin ? '/admin/login' : '/login');
+    router.replace(isRegAdmin ? '/admin/login' : '/login');
   };
 
   const handleToggleSidebar = () => {
