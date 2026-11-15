@@ -30,7 +30,10 @@ import {
   ShieldAlert,
   UserCheck,
   Sliders,
-  Filter
+  Filter,
+  MessageSquare,
+  Mail,
+  Send
 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { useRouter } from 'next/router';
@@ -164,6 +167,23 @@ const AdminUsersPage = () => {
     progressLabel: 'Authorization Progress',
   });
 
+  // Support Chat & Corporate Email Modal State
+  const [showSupportChatModal, setShowSupportChatModal] = useState(false);
+  const [supportChatUser, setSupportChatUser] = useState(null);
+  const [adminSupportChat, setAdminSupportChat] = useState({
+    corporateEmail: 'concierge.desk@ubs-privatebanking.com',
+    advisorName: 'UBS Private Wealth Concierge Desk',
+    messages: [],
+    unreadByAdmin: 0,
+  });
+  const [adminReplyText, setAdminReplyText] = useState('');
+  const [adminCorpEmailInput, setAdminCorpEmailInput] = useState('concierge.desk@ubs-privatebanking.com');
+  const [adminAdvisorNameInput, setAdminAdvisorNameInput] = useState('UBS Private Wealth Concierge Desk');
+  const [sendingAdminReply, setSendingAdminReply] = useState(false);
+  const [savingCorpEmail, setSavingCorpEmail] = useState(false);
+  const [corpEmailSavedToast, setCorpEmailSavedToast] = useState(false);
+  const adminChatEndRef = React.useRef(null);
+
   // Helper to check granular permission for the logged-in admin
   const canDo = (permId) => {
     if (isSuperAdmin) return true;
@@ -182,8 +202,8 @@ const AdminUsersPage = () => {
   }, [user, router, authLoading, isAnyAdmin]);
 
   // Fetch users from API
-  const fetchUsers = async () => {
-    setLoadingUsers(true);
+  const fetchUsers = async (silent = false) => {
+    if (!silent) setLoadingUsers(true);
     try {
       const res = await fetch('/api/admin/users');
       if (res.ok) {
@@ -205,7 +225,144 @@ const AdminUsersPage = () => {
     } catch (err) {
       console.error('Failed to load users:', err);
     } finally {
-      setLoadingUsers(false);
+      if (!silent) setLoadingUsers(false);
+    }
+  };
+
+  // Background poll users every 10 seconds to update unread Support Chat badges
+  useEffect(() => {
+    if (!user || !isAnyAdmin) return;
+    const interval = setInterval(() => {
+      fetchUsers(true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [user?.id, isAnyAdmin]);
+
+  // Open Support Chat modal for a specific user
+  const openSupportChatModal = async (targetUser) => {
+    setSupportChatUser(targetUser);
+    const existingChat = targetUser.supportChat || {
+      corporateEmail: 'concierge.desk@ubs-privatebanking.com',
+      advisorName: 'UBS Private Wealth Concierge Desk',
+      messages: [],
+      unreadByAdmin: 0,
+    };
+    setAdminSupportChat(existingChat);
+    setAdminCorpEmailInput(existingChat.corporateEmail || 'concierge.desk@ubs-privatebanking.com');
+    setAdminAdvisorNameInput(existingChat.advisorName || 'UBS Private Wealth Concierge Desk');
+    setAdminReplyText('');
+    setShowSupportChatModal(true);
+
+    try {
+      const res = await fetch(`/api/support?userId=${encodeURIComponent(targetUser.id)}&markRead=admin`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supportChat) {
+          setAdminSupportChat(data.supportChat);
+          setAdminCorpEmailInput(data.supportChat.corporateEmail || 'concierge.desk@ubs-privatebanking.com');
+          setAdminAdvisorNameInput(data.supportChat.advisorName || 'UBS Private Wealth Concierge Desk');
+          setUsers((prev) =>
+            prev.map((u) => (u.id === targetUser.id ? { ...u, supportChat: data.supportChat } : u))
+          );
+        }
+      }
+    } catch (_) {}
+  };
+
+  // Poll active user's support chat while modal is open
+  useEffect(() => {
+    if (!showSupportChatModal || !supportChatUser?.id) return;
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/support?userId=${encodeURIComponent(supportChatUser.id)}&markRead=admin`, {
+          cache: 'no-store',
+        });
+        if (!isMounted || !res.ok) return;
+        const data = await res.json();
+        if (isMounted && data.supportChat) {
+          setAdminSupportChat(data.supportChat);
+          setUsers((prev) =>
+            prev.map((u) => (u.id === supportChatUser.id ? { ...u, supportChat: data.supportChat } : u))
+          );
+        }
+      } catch (_) {}
+    }, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [showSupportChatModal, supportChatUser?.id]);
+
+  useEffect(() => {
+    if (showSupportChatModal && adminChatEndRef.current) {
+      adminChatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [showSupportChatModal, adminSupportChat.messages?.length]);
+
+  const handleSaveCorporateEmail = async () => {
+    if (!supportChatUser?.id || savingCorpEmail) return;
+    setSavingCorpEmail(true);
+    try {
+      const res = await fetch('/api/support', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: supportChatUser.id,
+          corporateEmail: adminCorpEmailInput.trim() || 'concierge.desk@ubs-privatebanking.com',
+          advisorName: adminAdvisorNameInput.trim() || 'UBS Private Wealth Concierge Desk',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supportChat) {
+          setAdminSupportChat(data.supportChat);
+          setUsers((prev) =>
+            prev.map((u) => (u.id === supportChatUser.id ? { ...u, supportChat: data.supportChat } : u))
+          );
+          setCorpEmailSavedToast(true);
+          setTimeout(() => setCorpEmailSavedToast(false), 2500);
+        }
+      }
+    } catch (_) {} finally {
+      setSavingCorpEmail(false);
+    }
+  };
+
+  const handleSendAdminReply = async (e) => {
+    e.preventDefault();
+    if (!supportChatUser?.id || !adminReplyText.trim() || sendingAdminReply) return;
+    const textToSend = adminReplyText.trim();
+    setSendingAdminReply(true);
+    setAdminReplyText('');
+    try {
+      const res = await fetch('/api/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: supportChatUser.id,
+          text: textToSend,
+          corporateEmail: adminCorpEmailInput.trim() || 'concierge.desk@ubs-privatebanking.com',
+          advisorName: adminAdvisorNameInput.trim() || 'UBS Private Wealth Concierge Desk',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supportChat) {
+          setAdminSupportChat(data.supportChat);
+          setUsers((prev) =>
+            prev.map((u) => (u.id === supportChatUser.id ? { ...u, supportChat: data.supportChat } : u))
+          );
+        }
+      } else {
+        setAdminReplyText(textToSend);
+      }
+    } catch (_) {
+      setAdminReplyText(textToSend);
+    } finally {
+      setSendingAdminReply(false);
     }
   };
 
@@ -1527,6 +1684,28 @@ const AdminUsersPage = () => {
                                   </td>
                                   <td className="py-3 px-4 text-right">
                                     <div className="flex items-center justify-end space-x-2">
+                                      <button
+                                        onClick={() => openSupportChatModal(u)}
+                                        className={`relative p-1.5 rounded transition-colors ${
+                                          u.supportChat?.unreadByAdmin > 0
+                                            ? 'text-white bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-300 shadow-sm'
+                                            : (u.supportChat?.messages?.length || 0) > 0
+                                            ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-300'
+                                            : 'text-neutral-500 hover:text-emerald-700 hover:bg-emerald-50'
+                                        }`}
+                                        title={
+                                          u.supportChat?.unreadByAdmin > 0
+                                            ? `${u.supportChat.unreadByAdmin} Unread Support Message(s) from ${u.name}`
+                                            : 'Open Live Support Chat & Corporate Email Settings'
+                                        }
+                                      >
+                                        <MessageSquare className="w-4 h-4" />
+                                        {u.supportChat?.unreadByAdmin > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center shadow animate-pulse">
+                                            {u.supportChat.unreadByAdmin}
+                                          </span>
+                                        )}
+                                      </button>
                                       {canDo('canManageNotices') && (
                                         <button
                                           onClick={() => openNoticeModal(u)}
@@ -1642,6 +1821,24 @@ const AdminUsersPage = () => {
 
                               {/* Action Buttons */}
                               <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
+                                <button
+                                  onClick={() => openSupportChatModal(u)}
+                                  className={`relative flex items-center space-x-1 px-2.5 py-1.5 rounded text-xs font-semibold transition-colors ${
+                                    u.supportChat?.unreadByAdmin > 0
+                                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-300'
+                                      : (u.supportChat?.messages?.length || 0) > 0
+                                      ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300'
+                                      : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                                  }`}
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span>Support</span>
+                                  {u.supportChat?.unreadByAdmin > 0 && (
+                                    <span className="ml-1 px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-bold">
+                                      {u.supportChat.unreadByAdmin}
+                                    </span>
+                                  )}
+                                </button>
                                 {canDo('canManageNotices') && (
                                   <button
                                     onClick={() => openNoticeModal(u)}
@@ -2861,6 +3058,164 @@ const AdminUsersPage = () => {
                       {actionLoading ? 'Saving...' : 'Apply Status'}
                     </Button>
                   </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* MODAL: LIVE SUPPORT CHAT & CORPORATE EMAIL CONFIGURATION  */}
+          {/* ========================================================= */}
+          {showSupportChatModal && supportChatUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-3 sm:p-4 animate-fade-in">
+              <div className="bg-white rounded-card shadow-bank-lg max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+                
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-5 py-4 bg-primary-navy text-white">
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 flex-shrink-0">
+                      <MessageSquare className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-base sm:text-lg font-bold truncate">
+                        Support Chat — {supportChatUser.name}
+                      </h2>
+                      <p className="text-xs text-blue-200 truncate">
+                        Client Email: {supportChatUser.email}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSupportChatModal(false)}
+                    className="text-neutral-300 hover:text-white p-1"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Corporate Email & Support Desk Name Configuration Bar */}
+                <div className="p-4 bg-neutral-50 border-b border-neutral-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1.5 text-xs font-bold text-primary-navy uppercase tracking-wider">
+                      <Mail className="w-3.5 h-3.5 text-primary-blue" />
+                      <span>Mockup Corporate Support Email & Desk Identity (Shown to User)</span>
+                    </div>
+                    {corpEmailSavedToast && (
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        ✓ Saved to User Support Header
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                    <div className="sm:col-span-5">
+                      <label className="block text-[11px] font-semibold text-neutral-600 mb-1">
+                        Corporate Support Email
+                      </label>
+                      <input
+                        type="email"
+                        value={adminCorpEmailInput}
+                        onChange={(e) => setAdminCorpEmailInput(e.target.value)}
+                        placeholder="concierge.desk@ubs-privatebanking.com"
+                        className="w-full px-3 py-1.5 text-xs font-mono border border-neutral-300 rounded-bank focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                      />
+                    </div>
+                    <div className="sm:col-span-5">
+                      <label className="block text-[11px] font-semibold text-neutral-600 mb-1">
+                        Support Desk / Advisor Name
+                      </label>
+                      <input
+                        type="text"
+                        value={adminAdvisorNameInput}
+                        onChange={(e) => setAdminAdvisorNameInput(e.target.value)}
+                        placeholder="UBS Private Wealth Concierge Desk"
+                        className="w-full px-3 py-1.5 text-xs border border-neutral-300 rounded-bank focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveCorporateEmail}
+                        disabled={savingCorpEmail}
+                        className="w-full py-1.5 px-3 bg-primary-blue hover:bg-opacity-90 text-white rounded-bank text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+                      >
+                        {savingCorpEmail ? 'Saving...' : 'Update'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Chat Conversation Area */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-neutral-100 min-h-[280px] max-h-[380px]">
+                  {(adminSupportChat?.messages || []).length === 0 ? (
+                    <div className="h-56 flex flex-col items-center justify-center text-center text-neutral-500 space-y-2">
+                      <MessageSquare className="w-8 h-8 text-neutral-400" />
+                      <p className="text-sm font-semibold text-neutral-700">No support messages yet</p>
+                      <p className="text-xs max-w-sm">
+                        When {supportChatUser.name} sends a message from their Support window, it will appear here in real time. You can also send the first message below.
+                      </p>
+                    </div>
+                  ) : (
+                    (adminSupportChat.messages || []).map((msg) => {
+                      const isFromAdmin = msg.sender === 'admin';
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${isFromAdmin ? 'items-end' : 'items-start'}`}
+                        >
+                          <div
+                            className={`max-w-[82%] rounded-2xl p-3 text-xs sm:text-sm shadow-sm ${
+                              isFromAdmin
+                                ? 'rounded-tr-sm bg-primary-navy text-white'
+                                : 'rounded-tl-sm bg-white border border-neutral-200 text-neutral-900'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3 mb-1">
+                              <span
+                                className={`text-[10px] font-bold uppercase tracking-wider ${
+                                  isFromAdmin ? 'text-amber-300' : 'text-primary-blue'
+                                }`}
+                              >
+                                {isFromAdmin
+                                  ? `${msg.senderName || adminAdvisorNameInput} (Support)`
+                                  : `${supportChatUser.name} (Client)`}
+                              </span>
+                              <span
+                                className={`text-[10px] font-mono ${
+                                  isFromAdmin ? 'text-blue-200' : 'text-neutral-400'
+                                }`}
+                              >
+                                {msg.timestamp || 'Just now'}
+                              </span>
+                            </div>
+                            <p className="whitespace-pre-line leading-relaxed break-words">{msg.text}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={adminChatEndRef} />
+                </div>
+
+                {/* Admin Reply Form */}
+                <form
+                  onSubmit={handleSendAdminReply}
+                  className="p-3.5 sm:p-4 bg-white border-t border-neutral-200 flex items-center space-x-2.5"
+                >
+                  <input
+                    type="text"
+                    value={adminReplyText}
+                    onChange={(e) => setAdminReplyText(e.target.value)}
+                    placeholder={`Reply to ${supportChatUser.name} as ${adminAdvisorNameInput || 'UBS Support'}...`}
+                    className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm border border-neutral-300 rounded-bank focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={!adminReplyText.trim() || sendingAdminReply}
+                    className="flex items-center space-x-1.5 px-4 py-2.5 text-xs sm:text-sm"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{sendingAdminReply ? 'Sending...' : 'Send Reply'}</span>
+                  </Button>
                 </form>
               </div>
             </div>
