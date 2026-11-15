@@ -35,7 +35,11 @@ import {
   AlertCircle,
   ExternalLink,
   Sparkles,
-  ShieldAlert
+  ShieldAlert,
+  Send,
+  Copy,
+  Check,
+  MessageSquare
 } from 'lucide-react';
 import UbsLogo from '../components/UbsLogo';
 import AccountNoticeCard from '../components/AccountNoticeCard';
@@ -176,6 +180,18 @@ const Dashboard = () => {
   const [showInvestmentsModal, setShowInvestmentsModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [inboxNotice, setInboxNotice] = useState(null);
+
+  // Live Support Chat & Corporate Email State
+  const [supportChat, setSupportChat] = useState({
+    corporateEmail: 'concierge.desk@ubs-privatebanking.com',
+    advisorName: 'UBS Private Wealth Concierge Desk',
+    messages: [],
+    unreadByUser: 0,
+  });
+  const [supportMessageInput, setSupportMessageInput] = useState('');
+  const [sendingSupportMsg, setSendingSupportMsg] = useState(false);
+  const [copiedCorpEmail, setCopiedCorpEmail] = useState(false);
+  const supportChatEndRef = React.useRef(null);
 
   // Authenticate user
   useEffect(() => {
@@ -358,6 +374,82 @@ const Dashboard = () => {
       isMounted = false;
     };
   }, [user?.id, user?.email]);
+
+  // Open Support Chat modal automatically if ?support=open is in the URL
+  useEffect(() => {
+    if (router.isReady && router.query.support === 'open') {
+      setShowContactModal(true);
+    }
+  }, [router.isReady, router.query.support]);
+
+  // Fetch & poll Support Chat messages and Corporate Email
+  useEffect(() => {
+    if (!user?.id) return;
+    let isMounted = true;
+
+    const fetchSupportChat = async (markRead = false) => {
+      try {
+        const res = await fetch(`/api/support${markRead ? '?markRead=user' : ''}`, { cache: 'no-store' });
+        if (!isMounted || !res.ok) return;
+        const data = await res.json();
+        if (isMounted && data.supportChat) {
+          setSupportChat(data.supportChat);
+        }
+      } catch (_) {}
+    };
+
+    fetchSupportChat(showContactModal);
+    const interval = setInterval(() => {
+      fetchSupportChat(showContactModal);
+    }, showContactModal ? 5000 : 15000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user?.id, showContactModal]);
+
+  useEffect(() => {
+    if (showContactModal && supportChatEndRef.current) {
+      supportChatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [showContactModal, supportChat.messages?.length]);
+
+  const handleSendSupportMessage = async (e) => {
+    e.preventDefault();
+    if (!supportMessageInput.trim() || sendingSupportMsg) return;
+    const textToSend = supportMessageInput.trim();
+    setSendingSupportMsg(true);
+    setSupportMessageInput('');
+    try {
+      const res = await fetch('/api/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: textToSend }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supportChat) {
+          setSupportChat(data.supportChat);
+        }
+      } else {
+        setSupportMessageInput(textToSend);
+      }
+    } catch (_) {
+      setSupportMessageInput(textToSend);
+    } finally {
+      setSendingSupportMsg(false);
+    }
+  };
+
+  const handleCopyCorporateEmail = () => {
+    if (!supportChat?.corporateEmail) return;
+    try {
+      navigator.clipboard.writeText(supportChat.corporateEmail);
+      setCopiedCorpEmail(true);
+      setTimeout(() => setCopiedCorpEmail(false), 2000);
+    } catch (_) {}
+  };
 
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Client';
   const fullName = user?.name || 'Valued Client';
@@ -572,11 +664,18 @@ const Dashboard = () => {
                       <Icon className={`w-4 h-4 flex-shrink-0 ${locked ? 'text-amber-500/70' : 'text-neutral-400 group-hover:text-amber-300'} group-hover:scale-110 transition-transform`} />
                       <span className="group-hover:translate-x-0.5 transition-transform truncate">{item.label}</span>
                     </div>
-                    {locked && (
-                      <span className="p-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-center justify-center shadow-sm" title="Service restricted by portfolio administrator">
-                        <Lock className="w-3 h-3 text-amber-400" />
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-1.5">
+                      {item.id === 'support' && supportChat?.unreadByUser > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-[#e60000] text-white text-[10px] font-bold shadow-[0_0_8px_rgba(230,0,0,0.6)] animate-pulse">
+                          {supportChat.unreadByUser}
+                        </span>
+                      )}
+                      {locked && (
+                        <span className="p-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-center justify-center shadow-sm" title="Service restricted by portfolio administrator">
+                          <Lock className="w-3 h-3 text-amber-400" />
+                        </span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -1219,10 +1318,15 @@ const Dashboard = () => {
                       }
                       setShowContactModal(true);
                     }}
-                    className="p-3.5 rounded-xl border border-amber-500/30 bg-gradient-to-b from-[#161b28] to-[#101420] hover:border-amber-400 hover:bg-[#1a2132] hover:shadow-[0_0_18px_rgba(212,175,55,0.18)] transition-all flex items-center justify-center space-x-2.5 text-xs sm:text-sm font-medium text-white group active:scale-95"
+                    className="relative p-3.5 rounded-xl border border-amber-500/30 bg-gradient-to-b from-[#161b28] to-[#101420] hover:border-amber-400 hover:bg-[#1a2132] hover:shadow-[0_0_18px_rgba(212,175,55,0.18)] transition-all flex items-center justify-center space-x-2.5 text-xs sm:text-sm font-medium text-white group active:scale-95"
                   >
                     <Headphones className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
                     <span>Contact UBS</span>
+                    {supportChat?.unreadByUser > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#e60000] text-white text-[10px] font-bold shadow-[0_0_8px_rgba(230,0,0,0.6)] animate-pulse">
+                        {supportChat.unreadByUser}
+                      </span>
+                    )}
                     {isPageLocked('support') && <Lock className="w-3 h-3 text-amber-400/80 ml-1" />}
                   </button>
 
@@ -1440,61 +1544,158 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* ======================= MODAL: CONTACT UBS ======================= */}
+      {/* ======================= MODAL: LIVE SUPPORT CHAT & CORPORATE EMAIL ======================= */}
       {showContactModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-lg rounded-2xl border border-amber-500/40 bg-gradient-to-b from-[#141824] to-[#0a0d14] p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#212635]">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-xl rounded-2xl border border-amber-500/40 bg-gradient-to-b from-[#141824] via-[#0e121b] to-[#090c12] shadow-[0_24px_70px_rgba(0,0,0,0.95),0_0_35px_rgba(212,175,55,0.14)] flex flex-col max-h-[88vh] overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#212635] bg-[#10141f]">
+              <div className="flex items-center space-x-3">
+                <div className="relative w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-[0_0_12px_rgba(212,175,55,0.2)]">
                   <Headphones className="w-4 h-4" />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-[#10141f]" />
                 </div>
-                <h3 className="text-lg font-serif font-semibold text-white tracking-wide">UBS Private Concierge</h3>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base sm:text-lg font-serif font-semibold text-white tracking-wide">
+                      {supportChat?.advisorName || 'UBS Private Wealth Concierge Desk'}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-green-400 font-medium flex items-center space-x-1.5">
+                    <span>Encrypted Live Support Line • Online</span>
+                  </p>
+                </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowContactModal(false)}
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-[#181d2c]"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-[#181d2c] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="py-4 space-y-4 text-xs sm:text-sm">
-              <p className="text-neutral-300 leading-relaxed">
-                Your dedicated UBS Wealth Advisor is available 24 hours a day, 7 days a week for portfolio management, private transactions, and global advisory.
-              </p>
-              <div className="p-3.5 rounded-xl bg-[#141824] border border-[#232a3d] space-y-1.5">
-                <div className="flex items-center space-x-2 text-amber-300 font-semibold">
-                  <Phone className="w-4 h-4" />
-                  <span>Private Wealth Hotline (Switzerland)</span>
+
+            {/* Official Corporate Support Email Banner */}
+            <div className="px-5 py-3 bg-gradient-to-r from-[#171d2e] via-[#131826] to-[#171d2e] border-b border-amber-500/25 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-300 flex-shrink-0">
+                  <Mail className="w-3.5 h-3.5" />
                 </div>
-                <p className="font-mono text-white text-sm">+41 44 234 1111</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#141824] border border-[#232a3d] space-y-1.5">
-                <div className="flex items-center space-x-2 text-amber-300 font-semibold">
-                  <Phone className="w-4 h-4" />
-                  <span>International Toll-Free (US / Americas)</span>
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90">
+                      Official Corporate Support Email
+                    </span>
+                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[9px] font-semibold">
+                      Verified Desk
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-mono font-semibold text-white truncate">
+                    {supportChat?.corporateEmail || 'concierge.desk@ubs-privatebanking.com'}
+                  </p>
                 </div>
-                <p className="font-mono text-white text-sm">+1 800 555 8271</p>
               </div>
               <button
-                onClick={() => {
-                  setShowContactModal(false);
-                  router.push('/messages');
-                }}
-                className="w-full py-2.5 rounded-xl border border-amber-500/50 text-amber-300 hover:bg-amber-500/15 font-semibold text-xs transition-colors flex items-center justify-center space-x-2"
+                type="button"
+                onClick={handleCopyCorporateEmail}
+                className="px-2.5 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 text-xs font-medium flex items-center space-x-1.5 transition-all flex-shrink-0"
               >
-                <Mail className="w-4 h-4" />
-                <span>Open Secure Messaging Portal</span>
+                {copiedCorpEmail ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-300">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Email</span>
+                  </>
+                )}
               </button>
             </div>
-            <div className="pt-2">
+
+            {/* Chat Conversation Feed */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-[#0b0e15] min-h-[290px] max-h-[420px]">
+              {/* Automated Welcome Message */}
+              <div className="flex items-start space-x-2.5">
+                <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 flex-shrink-0 mt-0.5">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                </div>
+                <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-[#151a28] border border-amber-500/25 p-3.5 text-xs sm:text-sm text-neutral-200 shadow-md">
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <span className="text-[11px] font-bold text-amber-300">
+                      {supportChat?.advisorName || 'UBS Private Wealth Concierge Desk'}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      {supportChat?.corporateEmail || 'concierge.desk@ubs-privatebanking.com'}
+                    </span>
+                  </div>
+                  <p className="leading-relaxed text-neutral-300">
+                    Welcome, <span className="text-white font-semibold">{fullName}</span>. You are connected to your dedicated Private Banking Support Desk. Send a message below and your portfolio administrator will respond directly here.
+                  </p>
+                </div>
+              </div>
+
+              {/* Dynamic Messages */}
+              {(supportChat?.messages || []).map((msg) => {
+                const isUserMsg = msg.sender === 'user';
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col ${isUserMsg ? 'items-end' : 'items-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-2xl p-3.5 text-xs sm:text-sm shadow-md ${
+                        isUserMsg
+                          ? 'rounded-tr-sm bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-medium'
+                          : 'rounded-tl-sm bg-[#161c2c] border border-amber-500/35 text-neutral-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider ${
+                            isUserMsg ? 'text-[#090b10]/80' : 'text-amber-300'
+                          }`}
+                        >
+                          {isUserMsg ? 'You' : (msg.senderName || supportChat?.advisorName || 'UBS Support')}
+                        </span>
+                        <span
+                          className={`text-[10px] font-mono ${
+                            isUserMsg ? 'text-[#090b10]/70' : 'text-neutral-400'
+                          }`}
+                        >
+                          {msg.timestamp || 'Just now'}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-line leading-relaxed break-words">{msg.text}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={supportChatEndRef} />
+            </div>
+
+            {/* Chat Input Form */}
+            <form
+              onSubmit={handleSendSupportMessage}
+              className="p-3.5 sm:p-4 bg-[#10141f] border-t border-[#212635] flex items-center space-x-2.5"
+            >
+              <input
+                type="text"
+                value={supportMessageInput}
+                onChange={(e) => setSupportMessageInput(e.target.value)}
+                placeholder="Type your message to Private Banking Support..."
+                className="flex-1 bg-[#0a0d14] border border-[#252c3f] focus:border-amber-500/60 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none transition-colors"
+              />
               <button
-                onClick={() => setShowContactModal(false)}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-bold text-xs sm:text-sm hover:brightness-110 shadow-md transition-all active:scale-95"
+                type="submit"
+                disabled={!supportMessageInput.trim() || sendingSupportMsg}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#dfba60] via-[#eed187] to-[#c79a40] text-[#090b10] font-bold text-xs sm:text-sm hover:brightness-110 disabled:opacity-50 transition-all flex items-center space-x-1.5 shadow-md active:scale-95 flex-shrink-0"
               >
-                Close
+                <Send className="w-3.5 h-3.5" />
+                <span>{sendingSupportMsg ? 'Sending...' : 'Send'}</span>
               </button>
-            </div>
+            </form>
           </div>
         </div>
       )}

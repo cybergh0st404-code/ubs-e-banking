@@ -120,7 +120,7 @@ const Sidebar = ({ isAdmin = false }) => {
     { id: 'statements', path: '/statements', icon: FileText, label: 'Statements' },
     { id: 'messages', path: '/messages', icon: Mail, label: 'Secure Messages' },
     { id: 'settings', path: '/settings', icon: Settings, label: 'Settings' },
-    { id: 'support', path: '/messages', icon: HelpCircle, label: 'Support' },
+    { id: 'support', path: '/dashboard?support=open', icon: HelpCircle, label: 'Support' },
     { id: 'wire-transfer', path: '/wire-transfer', icon: Send, label: 'Wire Transfer' },
     { id: 'deposit', path: '/deposit', icon: Camera, label: 'Deposit Checks' },
     { id: 'bill-pay', path: '/bill-pay', icon: Receipt, label: 'Bill Pay' },

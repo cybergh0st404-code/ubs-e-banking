@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, deleteUserFromDb, DEFAULT_ALLOWED_PAGES, normalizePagesList, resolveAdminContext } from '../../../../lib/db.js';
+import { getBankData, saveBankData, deleteUserFromDb, getAllSupportChatsMap, DEFAULT_CORPORATE_EMAIL, DEFAULT_ADVISOR_NAME, DEFAULT_ALLOWED_PAGES, normalizePagesList, resolveAdminContext } from '../../../../lib/db.js';
 import { requireAdmin, hashPassword, hashTwoFactorCode } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +37,7 @@ export async function GET(request) {
     });
 
     const visibleClientUsers = (data.users || []).filter((user) => ctx.canAccessUser(user));
+    const supportChatsMap = await getAllSupportChatsMap();
 
     const usersWithAccounts = visibleClientUsers.map((user) => {
       const userAccounts = (data.accounts || []).filter((a) => a.userId === user.id);
@@ -50,6 +51,14 @@ export async function GET(request) {
         user.createdByAdminName ||
         (user.createdByAdminId && allAdminsMap[user.createdByAdminId]) ||
         'Super Administrator';
+      const userSupport = supportChatsMap[user.id] || {
+        userId: user.id,
+        corporateEmail: DEFAULT_CORPORATE_EMAIL,
+        advisorName: DEFAULT_ADVISOR_NAME,
+        messages: [],
+        unreadByAdmin: 0,
+        unreadByUser: 0,
+      };
 
       return sanitizeUserForClient({
         ...user,
@@ -59,6 +68,7 @@ export async function GET(request) {
         totalBalance,
         primaryAccount: userAccounts[0] || null,
         initialDepositDate,
+        supportChat: userSupport,
       });
     });
 
