@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, normalizeAdminPermissions, resolveAdminContext } from '../../../../lib/db.js';
+import { getBankData, saveBankData, deleteAdminFromDb, normalizeAdminPermissions, resolveAdminContext } from '../../../../lib/db.js';
 import { requireSuperAdmin, hashPassword } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -342,6 +342,7 @@ export async function DELETE(request) {
         return u;
       });
 
+    await deleteAdminFromDb(id);
     await saveBankData(data);
 
     return new Response(JSON.stringify({ message: 'Admin removed successfully.' }), {

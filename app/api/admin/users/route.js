@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, DEFAULT_ALLOWED_PAGES, normalizePagesList, resolveAdminContext } from '../../../../lib/db.js';
+import { getBankData, saveBankData, deleteUserFromDb, DEFAULT_ALLOWED_PAGES, normalizePagesList, resolveAdminContext } from '../../../../lib/db.js';
 import { requireAdmin, hashPassword, hashTwoFactorCode } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -501,6 +501,7 @@ export async function DELETE(request) {
     data.accounts = (data.accounts || []).filter((a) => a.userId !== id);
     data.transactions = (data.transactions || []).filter((t) => t.userId !== id);
 
+    await deleteUserFromDb(id);
     await saveBankData(data);
 
     return new Response(JSON.stringify({ message: 'User deleted successfully.' }), {

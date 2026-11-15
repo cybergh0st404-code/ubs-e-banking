@@ -1,4 +1,4 @@
-import { getBankData, saveBankData, resolveAdminContext } from '../../../../lib/db.js';
+import { getBankData, saveBankData, deleteTransactionFromDb, resolveAdminContext } from '../../../../lib/db.js';
 import { requireAdmin } from '../../../../lib/security.js';
 
 export const dynamic = 'force-dynamic';
@@ -304,6 +304,7 @@ export async function DELETE(request) {
 
     data.transactions = (data.transactions || []).filter((t) => t.id !== id);
 
+    await deleteTransactionFromDb(id);
     await saveBankData(data);
 
     return new Response(JSON.stringify({ message: 'Transaction deleted.' }), {
