@@ -179,6 +179,7 @@ const Dashboard = () => {
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showInvestmentsModal, setShowInvestmentsModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [inboxNotice, setInboxNotice] = useState(null);
 
   // Live Support Chat & Corporate Email State
@@ -454,6 +455,15 @@ const Dashboard = () => {
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Client';
   const fullName = user?.name || 'Valued Client';
 
+  const handleSignOut = async () => {
+    setShowUserMenu(false);
+    setMobileMenuOpen(false);
+    if (logout) {
+      await logout();
+    }
+    router.replace('/login');
+  };
+
   const formatCurrency = (amount, currency = 'USD') => {
     if (!isBalanceVisible) return '••••••';
     const num = Number(amount) || 0;
@@ -526,62 +536,66 @@ const Dashboard = () => {
 
     if (s === 'blocked') {
       return (
-        <span className="flex items-center space-x-1.5 text-red-400 font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-[0_0_8px_#ef4444]" />
+        <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-red-500/20 border border-red-400/80 text-red-200 text-xs font-bold uppercase tracking-wider shadow-[0_0_16px_rgba(239,68,68,0.4)]">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 shadow-[0_0_8px_#ef4444]" />
           </span>
-          <span className="capitalize">Blocked</span>
+          <span>Blocked</span>
         </span>
       );
     }
     if (s === 'suspended') {
       return (
-        <span className="flex items-center space-x-1.5 text-amber-400 font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500 shadow-[0_0_8px_#f59e0b]" />
+        <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/80 text-amber-200 text-xs font-bold uppercase tracking-wider shadow-[0_0_16px_rgba(245,158,11,0.4)]">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 shadow-[0_0_8px_#f59e0b]" />
           </span>
-          <span className="capitalize">Suspended</span>
+          <span>Suspended</span>
         </span>
       );
     }
     if (s === 'flagged') {
       return (
-        <span className="flex items-center space-x-1.5 text-rose-400 font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_8px_#f43f5e]" />
+        <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/80 text-rose-200 text-xs font-bold uppercase tracking-wider shadow-[0_0_16px_rgba(244,63,94,0.4)]">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-[0_0_8px_#f43f5e]" />
           </span>
-          <span className="capitalize">Flagged</span>
+          <span>Flagged</span>
         </span>
       );
     }
     if (s === 'pending') {
       return (
-        <span className="flex items-center space-x-1.5 text-yellow-400 font-medium">
-          <span className="relative flex h-2 w-2">
+        <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-yellow-500/20 border border-yellow-400/80 text-yellow-200 text-xs font-bold uppercase tracking-wider shadow-[0_0_16px_rgba(234,179,8,0.35)]">
+          <span className="relative flex h-2.5 w-2.5">
             <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500 shadow-[0_0_8px_#eab308]" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-400 shadow-[0_0_8px_#eab308]" />
           </span>
-          <span className="capitalize">Pending</span>
+          <span>Pending</span>
         </span>
       );
     }
     if (s === 'inactive') {
       return (
-        <span className="flex items-center space-x-1.5 text-neutral-400 font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-neutral-500 shadow-[0_0_8px_#737373]" />
+        <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-rose-500/25 border border-rose-400/80 text-rose-200 text-xs font-bold uppercase tracking-wider shadow-[0_0_16px_rgba(244,63,94,0.4)]">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-[0_0_8px_#f43f5e]" />
           </span>
-          <span className="capitalize">Inactive</span>
+          <span>Inactive</span>
         </span>
       );
     }
     return (
-      <span className="flex items-center space-x-1.5 text-green-400 font-medium">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_#22c55e]" />
+      <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/75 text-emerald-200 text-xs font-bold uppercase tracking-wider shadow-[0_0_16px_rgba(16,185,129,0.38)]">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-[0_0_8px_#10b981]" />
         </span>
-        <span className="capitalize">Active</span>
+        <span>Active</span>
       </span>
     );
   };
@@ -787,10 +801,7 @@ const Dashboard = () => {
 
               <div className="mt-6 pt-4 border-t border-[#212635]">
                 <button
-                  onClick={() => {
-                    if (logout) logout();
-                    router.push('/login');
-                  }}
+                  onClick={handleSignOut}
                   className="w-full flex items-center justify-center space-x-2 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/40 rounded-xl transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
@@ -850,14 +861,46 @@ const Dashboard = () => {
                 <span>{currentTimeUtc || 'Mon, Nov 03, 2025 | 12:18 (UTC)'}</span>
               </div>
 
-              {/* Profile Avatar */}
-              <div 
-                onClick={() => router.push('/settings')}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-[#1d2332] to-[#121622] border border-amber-500/40 flex items-center justify-center text-amber-200 cursor-pointer hover:border-amber-400 hover:shadow-[0_0_12px_rgba(212,175,55,0.25)] transition-all"
-              >
-                <span className="font-serif font-semibold text-xs sm:text-sm">
-                  {firstName.charAt(0).toUpperCase()}
-                </span>
+              {/* Profile Avatar & Sign Out Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowUserMenu((prev) => !prev)}
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-[#1d2332] to-[#121622] border border-amber-500/40 flex items-center justify-center text-amber-200 cursor-pointer hover:border-amber-400 hover:shadow-[0_0_12px_rgba(212,175,55,0.25)] transition-all"
+                  aria-label="User menu"
+                  title="Account & Sign Out"
+                >
+                  <span className="font-serif font-semibold text-xs sm:text-sm">
+                    {firstName.charAt(0).toUpperCase()}
+                  </span>
+                </button>
+
+                {showUserMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setShowUserMenu(false)}
+                    />
+                    <div className="absolute right-0 mt-2.5 w-56 rounded-2xl border border-amber-500/35 bg-gradient-to-b from-[#141824] via-[#0e121b] to-[#090c12] shadow-[0_16px_40px_rgba(0,0,0,0.9),0_0_20px_rgba(212,175,55,0.12)] py-2 z-40">
+                      <div className="px-4 py-2.5 border-b border-[#212635]">
+                        <p className="text-xs font-semibold text-white truncate">{fullName}</p>
+                        {user?.email && (
+                          <p className="text-[11px] text-neutral-400 truncate mt-0.5">{user.email}</p>
+                        )}
+                      </div>
+                      <div className="p-1.5">
+                        <button
+                          type="button"
+                          onClick={handleSignOut}
+                          className="w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-rose-300 hover:text-white hover:bg-rose-500/20 border border-transparent hover:border-rose-500/40 transition-all"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-400" />
+                          <span>Sign Out / Log Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </header>
@@ -903,15 +946,18 @@ const Dashboard = () => {
                 
                 {/* Left Side: Portfolio Value & Status */}
                 <div className="space-y-3">
-                  <div className="flex items-center space-x-2 text-xs sm:text-sm text-neutral-300 tracking-wide font-medium">
-                    <span>Total Portfolio Value</span>
-                    <button 
-                      onClick={() => setIsBalanceVisible(!isBalanceVisible)}
-                      className="p-1 rounded-full text-neutral-400 hover:text-amber-300 transition-colors"
-                      aria-label="Toggle balance visibility"
-                    >
-                      {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
+                  <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-neutral-300 tracking-wide font-medium">
+                    <div className="flex items-center space-x-2">
+                      <span>Total Portfolio Value</span>
+                      <button 
+                        onClick={() => setIsBalanceVisible(!isBalanceVisible)}
+                        className="p-1 rounded-full text-neutral-400 hover:text-amber-300 transition-colors"
+                        aria-label="Toggle balance visibility"
+                      >
+                        {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {renderAccountStatusBadge()}
                   </div>
 
                   <div className="flex items-baseline space-x-3">
@@ -1508,6 +1554,10 @@ const Dashboard = () => {
                 <span className="font-mono text-amber-200 tracking-wider">
                   {accountNumber}
                 </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-[#1b2130]">
+                <span className="text-neutral-400">Account Status</span>
+                {renderAccountStatusBadge()}
               </div>
               <div className="flex justify-between py-2 border-b border-[#1b2130]">
                 <span className="text-neutral-400">Swiss IBAN</span>

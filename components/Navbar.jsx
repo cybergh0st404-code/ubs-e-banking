@@ -165,20 +165,10 @@ const Navbar = ({ user, onLogout }) => {
                     onClick={() => setShowProfileMenu(false)}
                   ></div>
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-card shadow-bank-lg border border-neutral-200 py-1.5 z-20 animate-fade-in">
-                    <div className="px-4 py-2 border-b border-neutral-100 sm:hidden">
+                    <div className="px-4 py-2 border-b border-neutral-100">
                       <p className="text-xs font-semibold text-neutral-800 truncate">{user?.name || 'User'}</p>
                       <p className="text-[11px] text-neutral-500 truncate">{user?.email || ''}</p>
                     </div>
-                    <button
-                      onClick={() => {
-                        router.push('/settings');
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center px-4 py-2 text-xs sm:text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
-                    >
-                      <Settings className="w-4 h-4 mr-2 text-neutral-500" />
-                      Settings
-                    </button>
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center px-4 py-2 text-xs sm:text-sm text-accent-red hover:bg-red-50 transition-colors"
