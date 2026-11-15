@@ -15,7 +15,7 @@ export async function GET(request) {
   }
 
   const rawUrl =
-    process.env.TURSO_DATABASE_URL || process.env.TURSO_DB_URL || process.env.DATABASE_URL || '';
+    process.env.PERMANENT_DB_URL || process.env.TURSO_DATABASE_URL || process.env.TURSO_DB_URL || process.env.DATABASE_URL || '';
   let host = 'local-sqlite-file (ephemeral on Vercel)';
   try {
     if (rawUrl && !rawUrl.startsWith('file:')) host = new URL(rawUrl.replace(/^libsql:/i, 'https:')).host;
