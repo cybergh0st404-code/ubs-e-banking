@@ -21,7 +21,13 @@ const Navbar = ({ user, onLogout }) => {
     }
   };
 
-  const hasNoticeMessage = Boolean(user?.notice && (user.notice.sendAsMessage || user.notice.enabled) && user.notice.message);
+  const noticeMessagesList =
+    user?.notice && Array.isArray(user.notice.messages) && user.notice.messages.length > 0
+      ? user.notice.messages
+      : user?.notice && (user.notice.sendAsMessage || user.notice.enabled) && user.notice.message
+      ? [user.notice]
+      : [];
+  const hasNoticeMessage = noticeMessagesList.length > 0;
 
   return (
     <nav className="bg-white border-b border-neutral-200 shadow-sm sticky top-0 z-40">
@@ -81,13 +87,14 @@ const Navbar = ({ user, onLogout }) => {
                     <div className="px-4 py-2 border-b border-neutral-100 flex items-center justify-between">
                       <span className="text-xs font-bold text-primary-navy uppercase tracking-wider">Notifications & Messages</span>
                       <span className="text-[10px] font-semibold bg-blue-50 text-primary-blue px-2 py-0.5 rounded-full">
-                        {hasNoticeMessage ? '2 Alerts' : '1 Alert'}
+                        {`${1 + noticeMessagesList.length} ${1 + noticeMessagesList.length === 1 ? 'Alert' : 'Alerts'}`}
                       </span>
                     </div>
 
                     <div className="max-h-72 overflow-y-auto divide-y divide-neutral-100">
-                      {hasNoticeMessage && (
+                      {noticeMessagesList.map((nMsg, idx) => (
                         <div
+                          key={nMsg.id || `nav-notice-${idx}`}
                           onClick={() => {
                             setShowNotifMenu(false);
                             router.push('/messages?open=notice');
@@ -96,18 +103,20 @@ const Navbar = ({ user, onLogout }) => {
                         >
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <span className="text-[10px] font-bold uppercase tracking-wider bg-accent-red text-white px-2 py-0.5 rounded-full">
-                              New Notice
+                              {idx === 0 ? 'New Notice' : 'Notice'}
                             </span>
-                            <span className="text-[10px] text-neutral-500">{user.notice.sentDate || 'Today'}</span>
+                            <span className="text-[10px] text-neutral-500">
+                              {nMsg.sentDate || 'Today'} {nMsg.sentTime ? `• ${nMsg.sentTime}` : ''}
+                            </span>
                           </div>
                           <div className="text-xs font-bold text-primary-navy">
-                            {user.notice.subject || user.notice.progressLabel || 'Official Account & Compliance Notice'}
+                            {nMsg.subject || nMsg.progressLabel || 'Official Account & Compliance Notice'}
                           </div>
                           <p className="text-xs text-neutral-600 line-clamp-2 mt-0.5">
-                            {user.notice.message}
+                            {nMsg.message}
                           </p>
                         </div>
-                      )}
+                      ))}
 
                       <div
                         onClick={() => {

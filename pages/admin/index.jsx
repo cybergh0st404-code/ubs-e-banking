@@ -170,6 +170,14 @@ const AdminUsersPage = () => {
   // Support Chat & Corporate Email Modal State
   const [showSupportChatModal, setShowSupportChatModal] = useState(false);
   const [supportChatUser, setSupportChatUser] = useState(null);
+
+  // Admin Self-Service Password Change Modal State
+  const [showAdminPassModal, setShowAdminPassModal] = useState(false);
+  const [adminPassForm, setAdminPassForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingAdminPass, setChangingAdminPass] = useState(false);
   const [adminSupportChat, setAdminSupportChat] = useState({
     corporateEmail: 'concierge.desk@ubs-privatebanking.com',
     advisorName: 'UBS Private Wealth Concierge Desk',
@@ -212,7 +220,9 @@ const AdminUsersPage = () => {
         if (data.adminContext?.permissions) {
           setLivePermissions(data.adminContext.permissions);
           if (updateUser) {
-            updateUser({ adminPermissions: data.adminContext.permissions });
+            updateUser({
+              adminPermissions: data.adminContext.permissions,
+            });
           }
         }
       } else if (res.status === 401 || res.status === 403) {
@@ -237,6 +247,51 @@ const AdminUsersPage = () => {
     }, 10000);
     return () => clearInterval(interval);
   }, [user?.id, isAnyAdmin]);
+
+  const handleAdminSelfPasswordChange = async (e) => {
+    e.preventDefault();
+    if (!adminPassForm.newPassword || adminPassForm.newPassword.trim().length < 6) {
+      alert('New password must be at least 6 characters long.');
+      return;
+    }
+    if (adminPassForm.newPassword.trim() !== adminPassForm.confirmPassword.trim()) {
+      alert('Passwords do not match. Please confirm your new password.');
+      return;
+    }
+
+    setChangingAdminPass(true);
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: adminPassForm.newPassword.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.message || 'Failed to update password.');
+        setChangingAdminPass(false);
+        return;
+      }
+
+      if (data.user && updateUser) {
+        updateUser({
+          ...data.user,
+          mustChangePassword: false,
+        });
+      }
+      if (data.user?.adminPermissions) {
+        setLivePermissions(data.user.adminPermissions);
+      }
+      setAdminPassForm({ newPassword: '', confirmPassword: '' });
+      setShowAdminPassModal(false);
+      alert('Your administrator password has been updated successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Network error while updating password.');
+    } finally {
+      setChangingAdminPass(false);
+    }
+  };
 
   // Open Support Chat modal for a specific user
   const openSupportChatModal = async (targetUser) => {
@@ -884,10 +939,17 @@ const AdminUsersPage = () => {
         }),
       });
       if (res.ok) {
+        const resData = await res.json().catch(() => ({}));
+        const updatedNotice = resData.user?.notice || { ...noticeForm };
         setUsers((prev) =>
-          prev.map((u) => (u.id === noticeUser.id ? { ...u, notice: { ...noticeForm } } : u))
+          prev.map((u) => (u.id === noticeUser.id ? { ...u, notice: updatedNotice } : u))
         );
-        alert(`Notice settings for ${noticeUser.name} updated successfully!`);
+        setNoticeUser((prev) => (prev ? { ...prev, notice: updatedNotice } : prev));
+        alert(
+          noticeForm.sendAsMessage
+            ? `Notice saved and delivered as a new message to ${noticeUser.name}'s inbox!`
+            : `Notice settings for ${noticeUser.name} updated successfully!`
+        );
         setShowNoticeModal(false);
         fetchUsers();
       } else {
@@ -1118,6 +1180,20 @@ const AdminUsersPage = () => {
                       >
                         <Shield className="w-4 h-4 text-amber-400" />
                         <span>Onboard Admin</span>
+                      </Button>
+                    )}
+
+                    {!isSuperAdmin && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setAdminPassForm({ newPassword: '', confirmPassword: '' });
+                          setShowAdminPassModal(true);
+                        }}
+                        className="flex items-center space-x-2 px-3.5 py-2.5 rounded-bank border border-neutral-300 text-neutral-700 hover:bg-neutral-100"
+                      >
+                        <Key className="w-4 h-4 text-primary-blue" />
+                        <span>Change Password</span>
                       </Button>
                     )}
 
@@ -2924,6 +3000,71 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
 
+                  {/* Previously Sent Inbox Notice Messages */}
+                  {Array.isArray(noticeUser.notice?.messages) && noticeUser.notice.messages.length > 0 && (
+                    <div className="p-3 bg-blue-50/50 rounded-bank border border-blue-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-primary-navy">
+                          Sent Inbox Messages ({noticeUser.notice.messages.length})
+                        </span>
+                        <span className="text-[11px] text-neutral-500">
+                          Saving with &ldquo;Message Box&rdquo; checked sends a new message
+                        </span>
+                      </div>
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                        {noticeUser.notice.messages.map((m, idx) => (
+                          <div
+                            key={m.id || idx}
+                            className="p-2 bg-white rounded border border-neutral-200 flex items-start justify-between gap-2 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-neutral-800 truncate">
+                                {m.subject || 'Official Account & Compliance Notice'}
+                              </div>
+                              <div className="text-[11px] text-neutral-500 truncate">{m.message}</div>
+                              <div className="text-[10px] text-neutral-400 mt-0.5">
+                                {m.sentDate || 'Sent'} {m.sentTime ? `• ${m.sentTime}` : ''}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const remaining = noticeUser.notice.messages.filter((_, i) => i !== idx);
+                                const res = await fetch('/api/admin/users', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    id: noticeUser.id,
+                                    replaceNoticeMessages: true,
+                                    notice: {
+                                      ...(noticeUser.notice || {}),
+                                      messages: remaining,
+                                    },
+                                  }),
+                                });
+                                if (res.ok) {
+                                  const resData = await res.json().catch(() => ({}));
+                                  const updatedNotice = resData.user?.notice || {
+                                    ...(noticeUser.notice || {}),
+                                    messages: remaining,
+                                  };
+                                  setNoticeUser((prev) => (prev ? { ...prev, notice: updatedNotice } : prev));
+                                  setUsers((prev) =>
+                                    prev.map((u) => (u.id === noticeUser.id ? { ...u, notice: updatedNotice } : u))
+                                  );
+                                }
+                              }}
+                              className="p-1 text-neutral-400 hover:text-red-600 rounded"
+                              title="Remove this message from user's inbox"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-end space-x-3 pt-4 border-t border-neutral-200">
                     <Button variant="secondary" type="button" onClick={() => setShowNoticeModal(false)}>
                       Cancel
@@ -3216,6 +3357,85 @@ const AdminUsersPage = () => {
                     <Send className="w-3.5 h-3.5" />
                     <span>{sendingAdminReply ? 'Sending...' : 'Send Reply'}</span>
                   </Button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ======================= MODAL: ADMIN SELF-SERVICE PASSWORD CHANGE ======================= */}
+          {showAdminPassModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4 animate-fade-in">
+              <div className="bg-white rounded-card shadow-bank-lg max-w-md w-full p-6 relative border-t-4 border-primary-blue">
+                <div className="flex justify-between items-center pb-4 border-b border-neutral-200 mb-4">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-primary-blue">
+                      <Key className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-primary-navy">
+                        Change Administrator Password
+                      </h3>
+                      <p className="text-xs text-neutral-500">
+                        Update your administrator login password
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassModal(false)}
+                    className="text-neutral-400 hover:text-neutral-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleAdminSelfPasswordChange} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                      New Password *
+                    </label>
+                    <Input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Enter new password (min. 6 characters)"
+                      value={adminPassForm.newPassword}
+                      onChange={(e) => setAdminPassForm({ ...adminPassForm, newPassword: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                      Confirm New Password *
+                    </label>
+                    <Input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Re-enter your new password"
+                      value={adminPassForm.confirmPassword}
+                      onChange={(e) => setAdminPassForm({ ...adminPassForm, confirmPassword: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-4 border-t border-neutral-200">
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      disabled={changingAdminPass}
+                      onClick={() => setShowAdminPassModal(false)}
+                      className="w-full sm:w-auto text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={changingAdminPass}
+                      className="w-full sm:w-auto text-xs"
+                    >
+                      {changingAdminPass ? 'Updating...' : 'Save New Password'}
+                    </Button>
+                  </div>
                 </form>
               </div>
             </div>

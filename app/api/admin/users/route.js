@@ -357,18 +357,63 @@ export async function PUT(request) {
       });
     }
 
-    // If notice settings were provided, update user notice
+    // If notice settings were provided, update user notice and append a new inbox message when sent/updated
     if (body.notice !== undefined) {
       const now = new Date();
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const formattedDate = `${months[now.getMonth()]} ${String(now.getDate()).padStart(2, '0')}, ${now.getFullYear()}`;
       const formattedTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+      const prevNotice = current.notice || {};
+      let messageHistory = Array.isArray(prevNotice.messages) ? [...prevNotice.messages] : [];
+
+      // Migrate any legacy single notice that didn't have a messages array yet
+      if (
+        messageHistory.length === 0 &&
+        (prevNotice.sendAsMessage || prevNotice.enabled) &&
+        prevNotice.message
+      ) {
+        messageHistory.push({
+          id: `notice-msg-legacy-${Date.now() - 1000}`,
+          sender: prevNotice.sender || 'UBS Wealth Management & Compliance',
+          subject: prevNotice.subject || prevNotice.progressLabel || 'Official Account & Compliance Notice',
+          category: prevNotice.category || 'Notices',
+          message: prevNotice.message,
+          sentDate: prevNotice.sentDate || formattedDate,
+          sentTime: prevNotice.sentTime || formattedTime,
+          progress: typeof prevNotice.progress === 'number' ? prevNotice.progress : 65,
+          progressStatus: prevNotice.progressStatus || '65% • Action Required',
+          progressLabel: prevNotice.progressLabel || 'Authorization Progress',
+          enabled: Boolean(prevNotice.enabled),
+        });
+      }
+
+      if (body.replaceNoticeMessages === true && Array.isArray(body.notice.messages)) {
+        messageHistory = body.notice.messages;
+      } else if (body.notice.sendAsMessage && body.notice.message) {
+        const newNoticeMessage = {
+          id: `notice-msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          sender: body.notice.sender || 'UBS Wealth Management & Compliance',
+          subject: body.notice.subject || body.notice.progressLabel || 'Official Account & Compliance Notice',
+          category: body.notice.category || 'Notices',
+          message: body.notice.message,
+          sentDate: formattedDate,
+          sentTime: formattedTime,
+          sentAt: now.toISOString(),
+          progress: typeof body.notice.progress === 'number' ? body.notice.progress : 65,
+          progressStatus: body.notice.progressStatus || '65% • Action Required',
+          progressLabel: body.notice.progressLabel || 'Authorization Progress',
+          enabled: Boolean(body.notice.enabled),
+        };
+        messageHistory = [newNoticeMessage, ...messageHistory];
+      }
+
       updatedUser.notice = {
-        ...(current.notice || {}),
+        ...prevNotice,
         ...body.notice,
-        sentDate: body.notice.sendAsMessage ? (body.notice.sentDate || formattedDate) : (current.notice?.sentDate || formattedDate),
-        sentTime: body.notice.sendAsMessage ? (body.notice.sentTime || formattedTime) : (current.notice?.sentTime || formattedTime),
+        sentDate: body.notice.sendAsMessage ? formattedDate : (prevNotice.sentDate || formattedDate),
+        sentTime: body.notice.sendAsMessage ? formattedTime : (prevNotice.sentTime || formattedTime),
+        messages: messageHistory,
       };
     }
 

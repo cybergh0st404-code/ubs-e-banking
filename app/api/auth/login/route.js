@@ -318,6 +318,7 @@ export async function POST(request) {
         lockedPages: dbUser.lockedPages || [],
         notice: dbUser.notice || null,
         adminPermissions: dbUser.adminPermissions || null,
+        mustChangePassword: Boolean(dbUser.mustChangePassword || dbUser.adminPermissions?.mustChangePassword),
       };
 
       const effectiveTokenVer =

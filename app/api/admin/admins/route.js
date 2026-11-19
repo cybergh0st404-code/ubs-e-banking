@@ -138,6 +138,7 @@ export async function POST(request) {
       createdByAdminId: auth.session.id || 'admin-1',
       createdByAdminName: auth.session.name || 'Super Administrator',
       adminPermissions: normalizeAdminPermissions(adminPermissions),
+      mustChangePassword: false,
       allowedPages: [],
       lockedPages: [],
     };
@@ -250,6 +251,7 @@ export async function PUT(request) {
         adminPermissions !== undefined
           ? normalizeAdminPermissions(adminPermissions)
           : normalizeAdminPermissions(current.adminPermissions),
+      mustChangePassword: false,
       tokenVersion,
     };
 

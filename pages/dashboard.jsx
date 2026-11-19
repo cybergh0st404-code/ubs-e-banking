@@ -341,7 +341,8 @@ const Dashboard = () => {
             });
           }
           setAccountRestriction(null);
-          if (data.notice && (data.notice.sendAsMessage || data.notice.enabled)) {
+          const hasNoticeHistory = Array.isArray(data.notice?.messages) && data.notice.messages.length > 0;
+          if (data.notice && (hasNoticeHistory || data.notice.sendAsMessage || data.notice.enabled)) {
             setInboxNotice(data.notice);
           } else {
             setInboxNotice(null);
@@ -454,6 +455,17 @@ const Dashboard = () => {
 
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Client';
   const fullName = user?.name || 'Valued Client';
+
+  const noticeMessagesList = React.useMemo(() => {
+    if (!inboxNotice) return [];
+    if (Array.isArray(inboxNotice.messages) && inboxNotice.messages.length > 0) {
+      return inboxNotice.messages;
+    }
+    if ((inboxNotice.sendAsMessage || inboxNotice.enabled) && inboxNotice.message) {
+      return [inboxNotice];
+    }
+    return [];
+  }, [inboxNotice]);
 
   const handleSignOut = async () => {
     setShowUserMenu(false);
@@ -847,8 +859,8 @@ const Dashboard = () => {
                 title="View Notifications & Secure Messages"
               >
                 <Mail className="w-5 h-5" />
-                <span className={`absolute top-1 right-1 w-4 h-4 rounded-full bg-[#e60000] text-white text-[9px] font-bold flex items-center justify-center shadow-[0_0_8px_rgba(230,0,0,0.6)] ${inboxNotice ? 'animate-pulse' : ''}`}>
-                  {inboxNotice ? 2 : 1}
+                <span className={`absolute top-1 right-1 w-4 h-4 rounded-full bg-[#e60000] text-white text-[9px] font-bold flex items-center justify-center shadow-[0_0_8px_rgba(230,0,0,0.6)] ${noticeMessagesList.length > 0 ? 'animate-pulse' : ''}`}>
+                  {1 + noticeMessagesList.length}
                 </span>
               </button>
 
@@ -1902,43 +1914,46 @@ const Dashboard = () => {
             </div>
 
             <div className="py-4 space-y-3">
-              {inboxNotice && (
-                <div className="p-4 rounded-xl bg-gradient-to-br from-red-950/60 via-[#1b1118] to-[#121622] border border-red-500/50 shadow-[0_0_20px_rgba(230,0,0,0.15)] space-y-2">
+              {noticeMessagesList.map((nMsg, idx) => (
+                <div
+                  key={nMsg.id || `notice-msg-${idx}`}
+                  className="p-4 rounded-xl bg-gradient-to-br from-red-950/60 via-[#1b1118] to-[#121622] border border-red-500/50 shadow-[0_0_20px_rgba(230,0,0,0.15)] space-y-2"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center space-x-2">
                       <span className="px-2 py-0.5 rounded-full bg-[#e60000] text-white text-[10px] font-bold uppercase tracking-wider">
-                        New Notice
+                        {idx === 0 ? 'New Notice' : 'Notice'}
                       </span>
                       <span className="text-xs font-semibold text-amber-300">
-                        {inboxNotice.sender || 'UBS Wealth Management & Compliance'}
+                        {nMsg.sender || 'UBS Wealth Management & Compliance'}
                       </span>
                     </div>
                     <span className="text-[11px] text-neutral-400 font-mono">
-                      {inboxNotice.sentDate || 'Today'} {inboxNotice.sentTime ? `• ${inboxNotice.sentTime}` : ''}
+                      {nMsg.sentDate || 'Today'} {nMsg.sentTime ? `• ${nMsg.sentTime}` : ''}
                     </span>
                   </div>
 
                   <h4 className="text-sm font-bold text-white font-serif">
-                    {inboxNotice.subject || inboxNotice.progressLabel || 'Official Account & Compliance Notice'}
+                    {nMsg.subject || nMsg.progressLabel || 'Official Account & Compliance Notice'}
                   </h4>
 
                   <div className="text-xs sm:text-sm text-neutral-200 whitespace-pre-line leading-relaxed bg-black/30 p-3 rounded-lg border border-white/10">
-                    {inboxNotice.message}
+                    {nMsg.message}
                   </div>
 
-                  {inboxNotice.enabled && (
+                  {(nMsg.enabled ?? inboxNotice?.enabled) && (
                     <div className="pt-1">
                       <div className="flex justify-between text-[11px] font-semibold text-neutral-300 mb-1">
-                        <span>{inboxNotice.progressLabel || 'Authorization Progress'}</span>
-                        <span className="text-red-400">{inboxNotice.progressStatus || `${inboxNotice.progress || 65}%`}</span>
+                        <span>{nMsg.progressLabel || 'Authorization Progress'}</span>
+                        <span className="text-red-400">{nMsg.progressStatus || `${nMsg.progress || 65}%`}</span>
                       </div>
                       <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-red-500 rounded-full" style={{ width: `${inboxNotice.progress || 65}%` }} />
+                        <div className="h-full bg-red-500 rounded-full" style={{ width: `${nMsg.progress || 65}%` }} />
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+              ))}
 
               {/* Standard Welcome / Security Notification */}
               <div className="p-3.5 rounded-xl bg-[#141824] border border-[#232a3d] space-y-1">

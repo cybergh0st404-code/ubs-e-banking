@@ -55,27 +55,34 @@ const MessagesPage = () => {
           if (!isMounted) return;
           if (data.notice) {
             setNotice(data.notice);
-            // If URL has ?open=notice and notice is sent as message or enabled, open it automatically
+            const rawHistory =
+              Array.isArray(data.notice.messages) && data.notice.messages.length > 0
+                ? data.notice.messages
+                : (data.notice.sendAsMessage || data.notice.enabled) && data.notice.message
+                ? [data.notice]
+                : [];
+            // If URL has ?open=notice and notice is sent as message or enabled, open the latest notice automatically
             if (
               typeof window !== 'undefined' &&
               new URLSearchParams(window.location.search).get('open') === 'notice' &&
-              (data.notice.sendAsMessage || data.notice.enabled)
+              rawHistory.length > 0
             ) {
+              const latest = rawHistory[0];
               setSelectedMessage({
-                id: 'msg-admin-notice',
-                sender: data.notice.sender || 'UBS Wealth Management & Compliance',
-                subject: data.notice.subject || data.notice.progressLabel || 'Official Account & Compliance Notice',
-                preview: data.notice.message || '',
-                date: data.notice.sentDate || 'Today',
-                time: data.notice.sentTime || 'Priority',
+                id: latest.id || 'msg-admin-notice-0',
+                sender: latest.sender || 'UBS Wealth Management & Compliance',
+                subject: latest.subject || latest.progressLabel || 'Official Account & Compliance Notice',
+                preview: latest.message || '',
+                date: latest.sentDate || 'Today',
+                time: latest.sentTime || 'Priority',
                 unread: true,
                 isPriorityNotice: true,
-                category: data.notice.category || 'Notices',
-                body: data.notice.message || '',
-                progress: data.notice.progress,
-                progressStatus: data.notice.progressStatus,
-                progressLabel: data.notice.progressLabel,
-                showProgress: Boolean(data.notice.enabled),
+                category: latest.category || 'Notices',
+                body: latest.message || '',
+                progress: latest.progress,
+                progressStatus: latest.progressStatus,
+                progressLabel: latest.progressLabel,
+                showProgress: Boolean(latest.enabled ?? data.notice.enabled),
               });
             }
           }
@@ -146,27 +153,32 @@ const MessagesPage = () => {
     },
   ];
 
-  const hasAdminMessage = Boolean(notice && (notice.sendAsMessage || notice.enabled) && notice.message);
-  const adminNoticeMessage = hasAdminMessage
-    ? {
-        id: 'msg-admin-notice',
-        sender: notice.sender || 'UBS Wealth Management & Compliance',
-        subject: notice.subject || notice.progressLabel || 'Official Account & Compliance Notice',
-        preview: notice.message,
-        date: notice.sentDate || 'Today',
-        time: notice.sentTime || 'Priority',
-        unread: true,
-        isPriorityNotice: true,
-        category: notice.category || 'Notices',
-        body: notice.message,
-        progress: notice.progress,
-        progressStatus: notice.progressStatus,
-        progressLabel: notice.progressLabel,
-        showProgress: Boolean(notice.enabled),
-      }
-    : null;
+  const rawNoticeHistory =
+    notice && Array.isArray(notice.messages) && notice.messages.length > 0
+      ? notice.messages
+      : notice && (notice.sendAsMessage || notice.enabled) && notice.message
+      ? [notice]
+      : [];
 
-  const messages = adminNoticeMessage ? [adminNoticeMessage, ...baseMessages] : baseMessages;
+  const adminNoticeMessages = rawNoticeHistory.map((nItem, idx) => ({
+    id: nItem.id || `msg-admin-notice-${idx}`,
+    sender: nItem.sender || 'UBS Wealth Management & Compliance',
+    subject: nItem.subject || nItem.progressLabel || 'Official Account & Compliance Notice',
+    preview: nItem.message || '',
+    date: nItem.sentDate || 'Today',
+    time: nItem.sentTime || 'Priority',
+    unread: true,
+    isPriorityNotice: true,
+    category: nItem.category || 'Notices',
+    body: nItem.message || '',
+    progress: nItem.progress,
+    progressStatus: nItem.progressStatus,
+    progressLabel: nItem.progressLabel,
+    showProgress: Boolean(nItem.enabled ?? notice?.enabled),
+  }));
+
+  const adminNoticeMessage = adminNoticeMessages[0] || null;
+  const messages = [...adminNoticeMessages, ...baseMessages];
 
   const filtered = activeFilter === 'all'
     ? messages

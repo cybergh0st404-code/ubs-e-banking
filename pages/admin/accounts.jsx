@@ -3,16 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { 
-  Users, 
-  CreditCard, 
-  History, 
-  Search, 
-  Power, 
-  PowerOff, 
-  Shield, 
-  DollarSign, 
-  Edit3, 
+import {
+  Users,
+  CreditCard,
+  History,
+  Search,
+  Power,
+  PowerOff,
+  Shield,
+  DollarSign,
+  Edit3,
   X,
   AlertCircle,
   Eye,
@@ -30,7 +30,7 @@ import { DEFAULT_ADMIN_PERMISSIONS, hasAdminPermission } from '../../lib/navigat
 const AdminAccountsPage = () => {
   const router = useRouter();
   const { user, logout, updateUser, loading: authLoading } = useAuth();
-  
+
   const isSuperAdmin = user?.role === 'superadmin';
   const isAnyAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
@@ -227,7 +227,7 @@ const AdminAccountsPage = () => {
         <Sidebar isAdmin={true} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-6">
-            
+
             {/* Header */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
@@ -247,9 +247,8 @@ const AdminAccountsPage = () => {
                       <div className="flex items-center space-x-2">
                         <Shield className="w-4 h-4 text-primary-blue" />
                         <span className="text-xs font-semibold text-neutral-700">Website Lock:</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                          websiteOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${websiteOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
                           {websiteOpen ? 'Open' : 'Locked'}
                         </span>
                       </div>
@@ -284,9 +283,8 @@ const AdminAccountsPage = () => {
                       <div className="flex items-center space-x-2">
                         <TrendingUp className="w-4 h-4 text-primary-blue" />
                         <span className="text-xs font-semibold text-neutral-700">Spending Overview:</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                          showSpendingOverview ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-700'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${showSpendingOverview ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-700'
+                          }`}>
                           {showSpendingOverview ? 'Visible' : 'Hidden'}
                         </span>
                       </div>
@@ -330,11 +328,10 @@ const AdminAccountsPage = () => {
                   <Link
                     key={tab.id}
                     href={tab.path}
-                    className={`flex-1 min-w-[130px] sm:min-w-0 flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-bank transition-all text-xs sm:text-sm whitespace-nowrap ${
-                      router.pathname === tab.path 
-                        ? 'bg-primary-blue text-white shadow-bank font-semibold'
-                        : 'text-neutral-600 hover:bg-accent-soft'
-                    }`}
+                    className={`flex-1 min-w-[130px] sm:min-w-0 flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-bank transition-all text-xs sm:text-sm whitespace-nowrap ${router.pathname === tab.path
+                      ? 'bg-primary-blue text-white shadow-bank font-semibold'
+                      : 'text-neutral-600 hover:bg-accent-soft'
+                      }`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
                     <span>{tab.label}</span>
@@ -426,9 +423,8 @@ const AdminAccountsPage = () => {
                               {canDo('canManageStatus') && (
                                 <button
                                   onClick={() => handleToggleFlag(account)}
-                                  className={`p-1.5 rounded transition-colors ${
-                                    account.status === 'flagged' ? 'text-green-600 hover:bg-green-50' : 'text-amber-600 hover:bg-amber-50'
-                                  }`}
+                                  className={`p-1.5 rounded transition-colors ${account.status === 'flagged' ? 'text-green-600 hover:bg-green-50' : 'text-amber-600 hover:bg-amber-50'
+                                    }`}
                                   title={account.status === 'flagged' ? 'Unflag Account' : 'Flag Account'}
                                 >
                                   <AlertCircle className="w-4 h-4" />
@@ -485,9 +481,8 @@ const AdminAccountsPage = () => {
                           {canDo('canManageStatus') && (
                             <button
                               onClick={() => handleToggleFlag(account)}
-                              className={`p-1.5 rounded transition-colors ${
-                                account.status === 'flagged' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'
-                              }`}
+                              className={`p-1.5 rounded transition-colors ${account.status === 'flagged' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'
+                                }`}
                               title={account.status === 'flagged' ? 'Unflag Account' : 'Flag Account'}
                             >
                               <AlertCircle className="w-4 h-4" />
